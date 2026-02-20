@@ -1,0 +1,39 @@
+# TUI Architecture
+
+This module lives under `indusagi/src/tui` and provides a minimal terminal UI framework.
+
+## Rendering Model
+
+`TUI` in `indusagi/src/tui/tui.ts` extends `Container` and renders to a `Terminal`.
+It maintains a cache of the previous lines and only updates changed lines.
+
+Key behaviors:
+
+- `requestRender(force?)` schedules a render pass.
+- `invalidate()` clears caches and forces a full redraw.
+- Focused components emit `CURSOR_MARKER` so TUI can place the hardware cursor for IME support.
+- Overlays are composited above base content with configurable anchors and margins.
+- Terminal resize events trigger re-layout and cursor recalculation.
+
+## Focus and Input
+
+`TUI.setFocus(component)` marks a component as focused.
+Focused components can implement `handleInput` to receive key sequences.
+
+`ProcessTerminal` enables raw mode, bracketed paste, and Kitty keyboard protocol when available.
+Input is parsed by `StdinBuffer` to avoid partial escape sequence issues.
+
+## Overlay System
+
+`showOverlay(component, options)` pushes an overlay onto the stack and returns an `OverlayHandle`.
+Overlays support:
+
+- Anchor positioning like `center`, `top-left`, `bottom-right`.
+- Optional width and height as absolute numbers or percentages.
+- Per-edge margins.
+- Visibility predicates based on terminal size.
+
+## Performance Notes
+
+The renderer keeps a working area and uses incremental updates.
+Full redraws are rare and counted via `fullRedraws`.

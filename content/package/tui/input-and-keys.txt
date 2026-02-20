@@ -1,0 +1,49 @@
+# Input, Keys, and Autocomplete
+
+## Key Parsing
+
+File: `indusagi/src/tui/keys.ts`
+
+Key types and helpers:
+
+- `KeyId` is a type-safe union of key identifiers.
+- `Key` is a helper for building key identifiers.
+- `parseKey(data)` returns the key identifier for raw input.
+- `matchesKey(data, keyId)` checks if input matches a key identifier.
+- `isKeyRepeat` and `isKeyRelease` handle Kitty keyboard protocol events.
+
+Kitty CSI-u sequences are supported for printable keys.
+Shift and base layout handling is implemented in the editor to preserve correct characters.
+
+## Keybindings
+
+File: `indusagi/src/tui/keybindings.ts`
+
+- `EditorAction` enumerates editor actions.
+- `EditorKeybindingsManager` maps actions to keys and exposes `matches`.
+- `DEFAULT_EDITOR_KEYBINDINGS` is the default mapping.
+- `getEditorKeybindings` returns the global manager.
+
+## Input Buffering
+
+File: `indusagi/src/tui/stdin-buffer.ts`
+
+- `StdinBuffer` splits raw stdin into complete escape sequences.
+- Supports CSI, OSC, DCS, and APC sequences.
+- Emits `data` events for key sequences and `paste` events for bracketed paste.
+
+## Autocomplete
+
+File: `indusagi/src/tui/autocomplete.ts`
+
+- `AutocompleteProvider` defines `getSuggestions` and `applyCompletion`.
+- `CombinedAutocompleteProvider` supports slash commands and file paths.
+- Fuzzy file search uses `@prefix` syntax.
+- File completion can use the external `fd` binary if present.
+
+## Fuzzy Matching
+
+File: `indusagi/src/tui/fuzzy.ts`
+
+- `fuzzyMatch(query, text)` returns a score.
+- `fuzzyFilter(items, query, getText)` filters and sorts by score.

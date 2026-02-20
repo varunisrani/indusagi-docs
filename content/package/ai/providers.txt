@@ -1,0 +1,202 @@
+# AI Providers
+
+This document describes provider-specific behavior and options implemented in `indusagi/src/ai/providers/*`.
+
+## Environment Variables
+
+These are read by `getEnvApiKey` in `indusagi/src/ai/env-api-keys.ts`.
+
+- `OPENAI_API_KEY` for provider `openai`
+- `AZURE_OPENAI_API_KEY` for provider `azure-openai-responses`
+- `GEMINI_API_KEY` for provider `google`
+- `GROQ_API_KEY` for provider `groq`
+- `CEREBRAS_API_KEY` for provider `cerebras`
+- `XAI_API_KEY` for provider `xai`
+- `OPENROUTER_API_KEY` for provider `openrouter`
+- `AI_GATEWAY_API_KEY` for provider `vercel-ai-gateway`
+- `ZAI_API_KEY` for provider `zai`
+- `MISTRAL_API_KEY` for provider `mistral`
+- `MINIMAX_API_KEY` for provider `minimax`
+- `MINIMAX_CN_API_KEY` for provider `minimax-cn`
+- `OPENCODE_API_KEY` for provider `opencode`
+- `COPILOT_GITHUB_TOKEN` or `GH_TOKEN` or `GITHUB_TOKEN` for provider `github-copilot`
+- `ANTHROPIC_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` for provider `anthropic`
+
+Google Vertex uses Application Default Credentials and requires:
+
+- `GOOGLE_APPLICATION_CREDENTIALS` or the default ADC file in `~/.config/gcloud/application_default_credentials.json`
+- `GOOGLE_CLOUD_PROJECT` or `GCLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+
+Amazon Bedrock uses standard AWS auth sources:
+
+- `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` plus `AWS_SECRET_ACCESS_KEY`
+- `AWS_BEARER_TOKEN_BEDROCK`
+- `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` or `AWS_CONTAINER_CREDENTIALS_FULL_URI`
+- `AWS_WEB_IDENTITY_TOKEN_FILE`
+
+## OpenAI Completions (`openai-completions`)
+
+Implementation: `providers/openai-completions.ts`
+
+Options:
+
+- `toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } }`
+- `reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh"`
+
+Highlights:
+
+- Supports images via `content` parts when model allows `input: ["text", "image"]`.
+- Handles tool calls and tool results, including providers that require special tool call IDs.
+- Supports provider compatibility overrides via `model.compat`.
+- Adds OpenRouter Anthropic cache control to the last user or assistant text block.
+
+Compatibility overrides for `model.compat` include:
+
+- `supportsStore`, `supportsDeveloperRole`, `supportsReasoningEffort`
+- `supportsUsageInStreaming`, `maxTokensField`
+- `requiresToolResultName`, `requiresAssistantAfterToolResult`
+- `requiresThinkingAsText`, `requiresMistralToolIds`
+- `thinkingFormat`, `openRouterRouting`
+
+## OpenAI Responses (`openai-responses`)
+
+Implementation: `providers/openai-responses.ts` and `providers/openai-responses-shared.ts`
+
+Options:
+
+- `reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh"`
+- `reasoningSummary?: "auto" | "detailed" | "concise" | null`
+- `serviceTier?: "auto" | "flex" | "priority"`
+
+Highlights:
+
+- Uses the Responses API and `processResponsesStream` for event handling.
+- Applies service tier cost multipliers for `flex` and `priority` tiers.
+- When reasoning is disabled on some GPT-5 models, it injects `# Juice: 0 !important` to disable reasoning.
+
+## Azure OpenAI Responses (`azure-openai-responses`)
+
+Implementation: `providers/azure-openai-responses.ts`
+
+Options:
+
+- `azureApiVersion?: string`
+- `azureResourceName?: string`
+- `azureBaseUrl?: string`
+- `azureDeploymentName?: string`
+- `reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh"`
+- `reasoningSummary?: "auto" | "detailed" | "concise" | null`
+
+Environment variables:
+
+- `AZURE_OPENAI_BASE_URL`
+- `AZURE_OPENAI_RESOURCE_NAME`
+- `AZURE_OPENAI_API_VERSION`
+- `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` (comma separated `modelId=deploymentName` pairs)
+
+## OpenAI Codex Responses (`openai-codex-responses`)
+
+Implementation: `providers/openai-codex-responses.ts`
+
+Options:
+
+- `reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh"`
+- `reasoningSummary?: "auto" | "concise" | "detailed" | "off" | "on" | null`
+- `textVerbosity?: "low" | "medium" | "high"`
+
+Highlights:
+
+- Uses ChatGPT Codex endpoint with SSE parsing and retry logic.
+- Requires a JWT access token, with account ID extracted from the token payload.
+- Supports `sessionId` which maps to `prompt_cache_key`.
+
+## Anthropic Messages (`anthropic-messages`)
+
+Implementation: `providers/anthropic.ts`
+
+Options:
+
+- `thinkingEnabled?: boolean`
+- `thinkingBudgetTokens?: number`
+- `interleavedThinking?: boolean`
+- `toolChoice?: "auto" | "any" | "none" | { type: "tool"; name: string }`
+
+Highlights:
+
+- Supports both API keys and OAuth tokens.
+- When using OAuth tokens, it mimics Claude Code headers and tool naming.
+- Supports tool calls, tool results, and image inputs.
+
+## Amazon Bedrock (`bedrock-converse-stream`)
+
+Implementation: `providers/amazon-bedrock.ts`
+
+Options:
+
+- `region?: string`
+- `profile?: string`
+- `toolChoice?: "auto" | "any" | "none" | { type: "tool"; name: string }`
+- `reasoning?: ThinkingLevel`
+- `thinkingBudgets?: ThinkingBudgets`
+- `interleavedThinking?: boolean`
+
+Highlights:
+
+- Uses AWS SDK `ConverseStreamCommand`.
+- Supports tool calls and tool results in a single user message (Bedrock requirement).
+- Adds prompt caching blocks for supported Claude models.
+- Handles model-specific support for reasoning signatures.
+
+## Google Generative AI (`google-generative-ai`)
+
+Implementation: `providers/google.ts` and `providers/google-shared.ts`
+
+Options:
+
+- `toolChoice?: "auto" | "none" | "any"`
+- `thinking?: { enabled: boolean; budgetTokens?: number; level?: GoogleThinkingLevel }`
+
+Highlights:
+
+- Supports text and image input.
+- Uses thought signatures for reasoning and tool calls when available.
+- Distinguishes Gemini 3 models that require `thinkingLevel` instead of `thinkingBudget`.
+
+## Google Vertex (`google-vertex`)
+
+Implementation: `providers/google-vertex.ts` and `providers/google-shared.ts`
+
+Options:
+
+- `project?: string`
+- `location?: string`
+- `toolChoice?: "auto" | "none" | "any"`
+- `thinking?: { enabled: boolean; budgetTokens?: number; level?: GoogleThinkingLevel }`
+
+Highlights:
+
+- Uses Vertex AI configuration with project and location.
+- Uses the same message conversion and tool handling as `google-generative-ai`.
+
+## Google Gemini CLI / Antigravity (`google-gemini-cli` and `google-antigravity`)
+
+Implementation: `providers/google-gemini-cli.ts` plus OAuth providers in `utils/oauth`.
+
+Options:
+
+- `projectId?: string`
+- `toolChoice?: "auto" | "none" | "any"`
+- `thinking?: { enabled: boolean; budgetTokens?: number; level?: GoogleThinkingLevel }`
+
+Highlights:
+
+- Uses Cloud Code Assist endpoint and requires OAuth credentials.
+- Supports both Gemini CLI and Antigravity endpoints with retry logic.
+- Injects system instructions for Antigravity and supports thought signatures.
+
+## OpenAI-Compatible Providers
+
+The OpenAI Completions provider handles compatibility for multiple non-OpenAI backends.
+Providers include `openrouter`, `xai`, `groq`, `cerebras`, `mistral`, `zai`, and `opencode`.
+Compatibility is auto-detected from `provider` and `baseUrl`, or overridden via `model.compat`.

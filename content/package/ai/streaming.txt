@@ -1,0 +1,58 @@
+# Streaming Model
+
+`stream` and `streamSimple` return an `AssistantMessageEventStream`, which is an async iterable of events.
+This stream is produced by provider adapters and is normalized to a single event model.
+
+## Event Types
+
+`AssistantMessageEvent` in `indusagi/src/ai/types.ts` includes:
+
+- `start` with a partial `AssistantMessage`.
+- `text_start`, `text_delta`, `text_end` for text blocks.
+- `thinking_start`, `thinking_delta`, `thinking_end` for reasoning blocks.
+- `toolcall_start`, `toolcall_delta`, `toolcall_end` for tool calls.
+- `done` with final message and stop reason.
+- `error` with error message and stop reason.
+
+## Event Order
+
+A typical streaming response:
+
+- `start`
+- zero or more block events in any order
+- `done` or `error`
+
+Tool call events can interleave with text or thinking blocks depending on provider.
+The final message can contain multiple blocks in `message.content`.
+
+## Result Handling
+
+`AssistantMessageEventStream` implements `result()` which resolves to the final `AssistantMessage`.
+`complete` and `completeSimple` are simple wrappers that await `result()`.
+
+## Tool Calls
+
+Tool calls are represented as content blocks:
+
+- `ToolCall` with `id`, `name`, and `arguments`.
+- Arguments are parsed incrementally using `parseStreamingJson`.
+
+Tool call IDs may be normalized to satisfy provider constraints.
+`transformMessages` in `indusagi/src/ai/providers/transform-messages.ts`:
+
+- Normalizes tool call IDs for cross-provider replay.
+- Removes unsupported signatures for other providers.
+- Inserts synthetic tool results for orphaned tool calls.
+- Drops assistant messages that ended with `error` or `aborted`.
+
+## Aborts
+
+All streaming functions accept an `AbortSignal` in `StreamOptions`.
+Providers check `signal.aborted` and convert it to `stopReason: "aborted"`.
+
+## Reasoning and Thinking
+
+`streamSimple` converts `SimpleStreamOptions` into provider-specific options.
+It supports `reasoning` levels and optional `thinkingBudgets`.
+Provider adapters may clamp levels or convert them to provider-specific parameters.
+

@@ -1,0 +1,225 @@
+# Subagents
+
+Subagents are specialized agents that run in isolated contexts with their own system prompts, tools, and model configurations. They're useful for delegating complex or multi-step tasks while keeping the primary context clean.
+
+## Overview
+
+The subagent system consists of:
+
+- **Task Tool** - Built-in `task` tool that the LLM can call to spawn subagents
+- **Subagent Definitions** - Markdown files defining subagent behavior, tools, and model
+- **SubagentStore** - Discovers and manages available subagent definitions
+
+## Using Subagents
+
+The LLM can spawn subagents via the `task` tool:
+
+```
+Use the explore subagent to search for authentication-related code
+```
+
+The task tool parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `description` | string | Short (3-5 words) description of the task |
+| `prompt` | string | The task for the subagent to perform |
+| `subagent_type` | string | Type of subagent (e.g., "general", "explore") |
+| `task_id` | string? | Resume a previous task by ID |
+
+## Built-in Subagents
+
+### general
+
+General-purpose subagent for multi-step tasks and research.
+
+- **Tools**: read, bash, edit, write, grep, find, ls
+- **Mode**: subagent only
+
+### explore
+
+Specialized in codebase exploration and search.
+
+- **Tools**: read, grep, find, ls (read-only)
+- **Mode**: subagent only
+
+## Custom Subagent Definitions
+
+Create subagent definitions in:
+
+- **Global**: `~/.indusagi/agent/agents/*.md`
+- **Project**: `.indusagi/agents/*.md`
+
+### Definition Format
+
+```markdown
+---
+name: my-agent
+description: What this agent does and when to use it
+tools: read, grep, find, ls
+model: anthropic/claude-sonnet-4-5
+thinkingLevel: medium
+mode: subagent
+hidden: false
+---
+
+System prompt for the agent goes here. This becomes the subagent's
+system prompt, replacing the default.
+
+Use this space to define:
+- The agent's specialization
+- How it should approach tasks
+- Output format expectations
+- Any constraints or guidelines
+```
+
+### Frontmatter Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique identifier (lowercase, hyphens allowed) |
+| `description` | No | Brief description of the agent's purpose |
+| `tools` | No | Comma-separated list of tools: `read, bash, edit, write, grep, find, ls` |
+| `model` | No | Model in `provider/id` format (e.g., `anthropic/claude-sonnet-4-5`) |
+| `thinkingLevel` | No | Thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `mode` | No | Visibility: `subagent` (default), `primary`, `all` |
+| `hidden` | No | Hide from LLM discovery (default: `false`) |
+
+### Mode Values
+
+| Mode | Description |
+|------|-------------|
+| `subagent` | Only available as a subagent via task tool (default) |
+| `primary` | Only available as primary agent (not as subagent) |
+| `all` | Available in both contexts |
+
+### Tool Options
+
+Available tools for subagents:
+
+| Tool | Description |
+|------|-------------|
+| `read` | Read file contents |
+| `bash` | Execute shell commands |
+| `edit` | Edit files by replacing text |
+| `write` | Create or overwrite files |
+| `grep` | Search file contents |
+| `find` | Find files by pattern |
+| `ls` | List directory contents |
+
+## SubagentStore API
+
+For programmatic access:
+
+```typescript
+import { SubagentStore } from "indusagi-coding-agent";
+
+const store = new SubagentStore({
+  cwd: process.cwd(),
+  agentDir: "~/.indusagi/agent",
+});
+
+// List all available subagents
+const agents = store.list();
+// [{ name: "general", description: "...", tools: [...], ... }, ...]
+
+// Get specific subagent
+const agent = store.get("explore");
+
+// Refresh after adding new definitions
+store.refresh();
+```
+
+## How It Works
+
+1. **Discovery**: SubagentStore scans `agents/` directories for `.md` files
+2. **Registration**: Available subagents are listed in the task tool description
+3. **Invocation**: When the LLM calls the task tool, a new `indusagi` subprocess is spawned
+4. **Isolation**: The subagent runs with its own context, system prompt, and tool set
+5. **Streaming**: Progress updates stream back to the primary session
+6. **Completion**: Final result is returned to the primary agent
+
+## Example: Code Review Agent
+
+Create `.indusagi/agents/reviewer.md`:
+
+```markdown
+---
+name: reviewer
+description: Code review specialist. Use for reviewing pull requests, patches, or changes.
+tools: read, grep, find, ls, bash
+model: anthropic/claude-sonnet-4-5
+---
+
+You are a code review specialist. Your job is to:
+
+1. Review code changes for correctness, security, and best practices
+2. Identify potential bugs, performance issues, or code smells
+3. Suggest improvements with specific, actionable feedback
+4. Check for proper error handling and edge cases
+
+Output format:
+- Summary of changes reviewed
+- Critical issues (if any)
+- Suggestions for improvement
+- Overall assessment
+
+Be thorough but concise. Focus on actionable feedback.
+```
+
+Use it:
+
+```
+Have the reviewer agent review the changes in src/auth/login.ts
+```
+
+## Example: Documentation Agent
+
+Create `~/.indusagi/agent/agents/docs-writer.md`:
+
+```markdown
+---
+name: docs-writer
+description: Technical documentation writer. Use for creating or updating documentation.
+tools: read, grep, find, ls, write
+model: anthropic/claude-sonnet-4-5
+---
+
+You are a technical documentation specialist. Write clear, comprehensive documentation.
+
+Guidelines:
+- Use proper markdown formatting
+- Include code examples where helpful
+- Structure with clear headings and sections
+- Add usage examples and common patterns
+- Document parameters, return values, and edge cases
+
+Do not modify code files - only create or update documentation (.md files).
+```
+
+## Task Tool in SDK
+
+When creating tools programmatically:
+
+```typescript
+import { createTaskTool, SubagentStore } from "indusagi-coding-agent";
+
+const subagentStore = new SubagentStore({ cwd: process.cwd() });
+
+const taskTool = createTaskTool({
+  cwd: process.cwd(),
+  settingsManager,
+  modelRegistry,
+  subagentStore,
+  getDefaultModel: () => model,
+  getDefaultThinkingLevel: () => "medium",
+  contextFiles: [],
+  skills: [],
+});
+```
+
+## Related
+
+- [SDK Documentation](sdk.md) - Programmatic usage
+- [Extensions](extensions.md) - Building custom extensions
+- [Skills](skills.md) - On-demand capability packages

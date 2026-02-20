@@ -1,0 +1,61 @@
+# OAuth Providers
+
+OAuth helpers live in `indusagi/src/ai/utils/oauth` and are re-exported from `indusagi/ai`.
+They provide login, refresh, and API key extraction for providers that do not use static API keys.
+
+## Registry API
+
+- `getOAuthProvider(id)`
+- `getOAuthProviders()`
+- `registerOAuthProvider(provider)`
+- `getOAuthApiKey(providerId, credentialsMap)`
+
+`getOAuthApiKey` refreshes tokens when expired and returns the new credentials plus an API key string.
+
+## CLI Helper
+
+`indusagi/src/ai/cli.ts` provides a small CLI that stores tokens in `auth.json`.
+It supports `login` and `list` commands and uses the OAuth registry.
+
+## Provider Summary
+
+### Anthropic
+
+File: `utils/oauth/anthropic.ts`
+
+- Uses PKCE and a manual code paste flow.
+- Returns access and refresh tokens.
+- `getApiKey` returns the access token.
+
+### GitHub Copilot
+
+File: `utils/oauth/github-copilot.ts`
+
+- Uses GitHub device flow and exchanges for a Copilot token.
+- Supports GitHub Enterprise domains.
+- `modifyModels` updates the Copilot base URL from token metadata.
+
+### Google Cloud Code Assist (Gemini CLI)
+
+File: `utils/oauth/google-gemini-cli.ts`
+
+- Uses local callback server on port 8085.
+- Requires `GEMINI_CLI_CLIENT_ID` and `GEMINI_CLI_CLIENT_SECRET`.
+- Returns a JSON API key string `{ token, projectId }`.
+
+### Google Antigravity
+
+File: `utils/oauth/google-antigravity.ts`
+
+- Uses local callback server on port 51121.
+- Uses a different Google OAuth client for access to additional models.
+- Returns a JSON API key string `{ token, projectId }`.
+
+### OpenAI Codex (ChatGPT OAuth)
+
+File: `utils/oauth/openai-codex.ts`
+
+- Uses local callback server on port 1455.
+- Uses PKCE and stores ChatGPT account ID from the JWT payload.
+- `getApiKey` returns the access token.
+

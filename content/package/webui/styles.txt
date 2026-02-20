@@ -1,0 +1,24 @@
+# Web UI Styles
+
+Global styles are defined in `indusagi/src/webui/app.css`.
+
+## What app.css Includes
+
+- Imports the default mini-lit theme.
+- Defines a Tailwind `@source` directive for component scanning.
+- Imports Tailwind CSS.
+
+## Global Tweaks
+
+`app.css` also adds UI refinements:
+
+- Sets base font size and font smoothing on `body`.
+- Defines thin scrollbars for both Firefox and WebKit.
+- Ensures dialog close buttons use the pointer cursor.
+- Adds the `shimmer` keyframes and `.animate-shimmer` class for thinking blocks.
+- Adds `.user-message-container` for the gradient user message bubble.
+
+## Where Styles Are Applied
+
+Most Web UI components render in light DOM, so these global styles apply directly.
+If you embed `ChatPanel` in another page, make sure `app.css` is included in the build.

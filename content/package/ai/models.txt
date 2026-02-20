@@ -1,0 +1,44 @@
+# Models and Registry
+
+Models are defined in `indusagi/src/ai/models.generated.ts` and loaded into an in-memory registry in `indusagi/src/ai/models.ts`.
+
+## Model Structure
+
+Each `Model<TApi>` includes:
+
+- `id` and `name`
+- `api` and `provider`
+- `baseUrl`
+- `reasoning` support flag
+- `input` types (`text`, `image`)
+- `cost` per million tokens for input, output, cache read, cache write
+- `contextWindow` and `maxTokens`
+- Optional `headers` and `compat`
+
+## Registry Functions
+
+- `getModel(provider, modelId)` returns a single model by provider and ID.
+- `getModels(provider)` returns all models for a provider.
+- `getProviders()` returns known provider names.
+
+## Cost Calculation
+
+`calculateCost(model, usage)` mutates and returns `usage.cost`:
+
+- Computes cost based on model rates and usage tokens.
+- Handles cache read and cache write separately.
+
+## Reasoning Levels
+
+`supportsXhigh(model)` returns true for specific OpenAI Codex models.
+Other providers clamp `xhigh` to `high`.
+
+## Compatibility Overrides
+
+`Model.compat` allows overriding behavior for OpenAI-compatible providers.
+See `indusagi/docs/ai/providers.md` for the full compatibility fields.
+
+## Custom Models
+
+The Web UI supports custom providers and model discovery.
+See `indusagi/docs/webui/storage-and-settings.md` and `indusagi/docs/webui/sandbox.md`.

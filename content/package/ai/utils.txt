@@ -1,0 +1,45 @@
+# AI Utilities
+
+Utility helpers live in `indusagi/src/ai/utils` and are re-exported from `indusagi/ai`.
+
+## Event Streams
+
+File: `indusagi/src/ai/utils/event-stream.ts`
+
+- `EventStream<T, R>` is a generic async iterable with `push` and `result()`.
+- `AssistantMessageEventStream` is specialized for assistant message events.
+- `createAssistantMessageEventStream()` creates a new stream instance.
+
+## JSON Parsing for Tool Calls
+
+File: `indusagi/src/ai/utils/json-parse.ts`
+
+`parseStreamingJson(partialJson)` tolerates incomplete JSON and returns a best-effort object.
+It uses `partial-json` as a fallback.
+
+## Unicode Sanitization
+
+File: `indusagi/src/ai/utils/sanitize-unicode.ts`
+
+`sanitizeSurrogates(text)` removes unpaired Unicode surrogate characters.
+This prevents JSON serialization errors in provider SDKs.
+
+## Overflow Detection
+
+File: `indusagi/src/ai/utils/overflow.ts`
+
+`isContextOverflow(message, contextWindow?)` detects context window errors.
+It checks provider-specific error patterns and can detect silent overflow when `usage.input` exceeds `contextWindow`.
+
+## TypeBox Helpers
+
+File: `indusagi/src/ai/utils/typebox-helpers.ts`
+
+`StringEnum(values, options?)` creates a string enum schema compatible with providers that do not accept `anyOf` or `const`.
+
+## Tool Validation
+
+File: `indusagi/src/ai/utils/validation.ts`
+
+`validateToolArguments(tool, toolCall)` and `validateToolCall(tools, toolCall)` use AJV to validate tool call arguments.
+Validation is disabled in strict CSP environments like browser extensions.

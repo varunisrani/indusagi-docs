@@ -1,0 +1,76 @@
+# AI API Reference
+
+This document describes the public API surfaced by `indusagi/ai`.
+The exact re-export list is defined in `indusagi/src/ai/index.ts`.
+
+## Core Functions
+
+From `indusagi/src/ai/stream.ts`:
+
+- `stream(model, context, options)`
+- `complete(model, context, options)`
+- `streamSimple(model, context, options)`
+- `completeSimple(model, context, options)`
+- `getEnvApiKey(provider)`
+
+From `indusagi/src/ai/models.ts`:
+
+- `getModel(provider, modelId)`
+- `getProviders()`
+- `getModels(provider)`
+- `calculateCost(model, usage)`
+- `supportsXhigh(model)`
+- `modelsAreEqual(a, b)`
+
+From `indusagi/src/ai/api-registry.ts`:
+
+- `registerApiProvider(provider, sourceId?)`
+- `getApiProvider(api)`
+- `getApiProviders()`
+- `unregisterApiProviders(sourceId)`
+- `clearApiProviders()`
+
+From `indusagi/src/ai/utils/*`:
+
+- `parseStreamingJson(partialJson)`
+- `sanitizeSurrogates(text)`
+- `isContextOverflow(message, contextWindow?)`
+- `getOverflowPatterns()`
+- `StringEnum(values, options?)`
+- `validateToolArguments(tool, toolCall)`
+- `validateToolCall(tools, toolCall)`
+- `createAssistantMessageEventStream()`
+
+OAuth utilities are re-exported from `indusagi/src/ai/utils/oauth/index.ts`.
+See `indusagi/docs/ai/oauth.md`.
+
+## Types
+
+All types live in `indusagi/src/ai/types.ts`.
+Key types include:
+
+- `Api`, `KnownApi`, `Provider`, `KnownProvider`
+- `Model<TApi>`
+- `Context`
+- `Message`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`
+- `TextContent`, `ThinkingContent`, `ImageContent`, `ToolCall`
+- `StreamOptions`, `SimpleStreamOptions`, `ThinkingLevel`, `ThinkingBudgets`
+- `Tool<TParameters>`
+- `AssistantMessageEvent` and `AssistantMessageEventStream`
+
+## Provider Options
+
+Providers add their own options in their adapter files.
+Examples:
+
+- `OpenAICompletionsOptions`
+- `OpenAIResponsesOptions`
+- `AzureOpenAIResponsesOptions`
+- `OpenAICodexResponsesOptions`
+- `AnthropicOptions`
+- `BedrockOptions`
+- `GoogleOptions`
+- `GoogleGeminiCliOptions`
+- `GoogleVertexOptions`
+
+See `indusagi/docs/ai/providers.md` for details.

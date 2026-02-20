@@ -1,0 +1,814 @@
+# Agent Loop and Tools
+
+The loop is implemented in `indusagi/src/agent/agent-loop.ts`.
+It is responsible for turning messages into LLM calls, executing tools, and emitting events.
+
+## Loop Phases
+
+1. Add incoming prompts to context.
+2. Convert `AgentMessage[]` to LLM `Message[]` via `convertToLlm`.
+3. Call `streamSimple` or a custom `streamFn`.
+4. Emit streaming events as the assistant responds.
+5. Execute tool calls and emit tool execution events.
+6. Insert tool results into context and continue if tool calls exist.
+7. Apply steering messages or follow-up messages if configured.
+8. Emit `agent_end` and return new messages.
+
+## Tool Execution
+
+`executeToolCalls` does the following:
+
+- Finds matching `AgentTool` by name.
+- Validates tool arguments via `validateToolArguments` from the AI module.
+- Executes tools sequentially.
+- Emits `tool_execution_start`, `tool_execution_update`, and `tool_execution_end`.
+- Creates `ToolResultMessage` objects and appends them to context.
+
+If a steering message arrives during tool execution, remaining tool calls are skipped.
+Skipped tool calls still produce tool results marked as errors.
+
+## Error Handling
+
+- If assistant response ends with `error` or `aborted`, the loop ends.
+- If a tool fails, error is converted to a `ToolResultMessage` with `isError: true`.
+- Aborted assistant messages are not replayed by `transformMessages`.
+
+## Customization Points
+
+You can customize behavior with these hooks in `AgentLoopConfig`:
+
+- `convertToLlm` for message transformation.
+- `transformContext` for pruning or augmentation.
+- `getApiKey` for short-lived tokens.
+- `getSteeringMessages` for mid-run interrupts.
+- `getFollowUpMessages` for post-run continuation.
+
+---
+
+# Available Tools
+
+The indusagi agent framework now includes **12 built-in coding tools** located in `indusagi/src/agent/tools/`.
+
+All tools implement the `AgentTool` interface and support:
+
+- **Pluggable operations** - You can override file system operations for remote systems (SSH, etc.)
+- **Streaming updates** - Tools can emit partial results via `onUpdate` callback
+- **Abort signal** - All tool execution respects `AbortSignal` for cancellation
+
+## Tool Collections
+
+```typescript
+import {
+  codingTools,      // Full access: read, bash, edit, write, task, todo, websearch, webfetch
+  readOnlyTools,    // Read-only: read, grep, find, ls, todo, websearch, webfetch
+  createCodingTools, // Factory for full access tools
+  createReadOnlyTools, // Factory for read-only tools
+  createAllTools,    // Factory for all tools as a Record
+} from "indusagi/agent";
+```
+
+---
+
+## 1. read - Read File Contents
+
+Read files from the file system. Supports text files and images (JPG, PNG, GIF, WebP).
+
+**Tool Name:** `read`
+**Label:** `read`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `path` | string | Yes | Path to the file to read (relative or absolute) |
+| `offset` | number | No | Line number to start reading from (1-indexed) |
+| `limit` | number | No | Maximum number of lines to read |
+
+### Description
+
+Reads the contents of a file. For text files, output is truncated to **2000 lines** or **50KB** (whichever is hit first). Use `offset/limit` for large files. When you need the full file, continue with `offset` until complete.
+
+Images are sent as attachments and automatically resized to 2000x2000 max.
+
+### Example Usage
+
+```typescript
+import { Agent, createReadTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createReadTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Read entire file
+await agent.prompt("Read the package.json file");
+
+// Read with pagination
+await agent.prompt("Read lines 1-100 of a large log file");
+```
+
+### Output
+
+Returns text content for text files, or image attachment for image files.
+
+---
+
+## 2. bash - Execute Bash Commands
+
+Execute bash commands in the current working directory.
+
+**Tool Name:** `bash`
+**Label:** `bash`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `command` | string | Yes | Bash command to execute |
+| `timeout` | number | No | Timeout in seconds (optional, no default timeout) |
+
+### Description
+
+Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last **2000 lines** or **50KB** (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.
+
+### Example Usage
+
+```typescript
+import { Agent, createBashTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createBashTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Run a command
+await agent.prompt("List all files in the current directory");
+
+// Run with timeout
+await agent.prompt("Run npm install with 60 second timeout");
+```
+
+### Output
+
+Returns command output. Truncated output includes a notice with the temp file path if full output is saved.
+
+---
+
+## 3. edit - Edit Files by Text Replacement
+
+Edit files by replacing exact text. The old text must match exactly (including whitespace).
+
+**Tool Name:** `edit`
+**Label:** `edit`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `path` | string | Yes | Path to the file to edit (relative or absolute) |
+| `oldText` | string | Yes | Exact text to find and replace (must match exactly) |
+| `newText` | string | Yes | New text to replace the old text with |
+
+### Description
+
+Edit a file by replacing exact text. The `oldText` must match exactly (including whitespace). Use this for precise, surgical edits.
+
+Supports fuzzy matching for Unicode quotes, dashes, and spaces.
+
+### Example Usage
+
+```typescript
+import { Agent, createEditTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createEditTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Edit a file
+await agent.prompt("Change 'Hello World' to 'Hello indusagi' in index.html");
+```
+
+### Output
+
+Returns a unified diff showing the changes made, with line numbers.
+
+---
+
+## 4. write - Write Content to Files
+
+Write content to files. Creates files if they don't exist, overwrites if they do.
+
+**Tool Name:** `write`
+**Label:** `write`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `path` | string | Yes | Path to the file to write (relative or absolute) |
+| `content` | string | Yes | Content to write to the file |
+
+### Description
+
+Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.
+
+### Example Usage
+
+```typescript
+import { Agent, createWriteTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createWriteTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Write a file
+await agent.prompt("Create a new README.md file with project information");
+
+// Create a configuration file
+await agent.prompt("Write a .gitignore file");
+```
+
+### Output
+
+Returns success message with the number of bytes written.
+
+---
+
+## 5. grep - Search File Contents
+
+Search file contents for patterns. Returns matching lines with file paths and line numbers.
+
+**Tool Name:** `grep`
+**Label:** `grep`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `pattern` | string | Yes | Search pattern (regex or literal string) |
+| `path` | string | No | Directory or file to search (default: current directory) |
+| `ignoreCase` | boolean | No | Case-insensitive search (default: false) |
+| `literal` | boolean | No | Treat pattern as literal string instead of regex (default: false) |
+| `context` | number | No | Number of lines to show before and after each match (default: 0) |
+| `limit` | number | No | Maximum number of matches to return (default: 100) |
+
+### Description
+
+Search file contents for a pattern. Returns matching lines with file paths and line numbers. Supports regex or literal string matching. Output is truncated to **100 matches** or **50KB** (whichever is hit first). Long lines are truncated to **500 characters**.
+
+### Example Usage
+
+```typescript
+import { Agent, createGrepTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createGrepTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Search for a pattern
+await agent.prompt("Search for 'TODO' comments in the codebase");
+
+// Case-insensitive search
+await agent.prompt("Find all occurrences of 'function' (case insensitive)");
+
+// Literal search with context
+await agent.prompt("Find 'import' statements with 2 lines of context");
+```
+
+### Output
+
+Returns matching lines in format `filename:lineNumber: line` or `filename-lineNumber: contextLine`.
+
+---
+
+## 6. find - Find Files by Glob Pattern
+
+Search for files by glob pattern. Returns matching file paths.
+
+**Tool Name:** `find`
+**Label:** `find`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `pattern` | string | Yes | Glob pattern to match files (e.g., '*.ts', '**/*.json', 'src/**/*.spec.ts') |
+| `path` | string | No | Directory to search in (default: current directory) |
+| `limit` | number | No | Maximum number of results (default: 1000) |
+
+### Description
+
+Search for files by glob pattern. Returns matching file paths relative to the search directory. Output is truncated to **1000 results** or **50KB** (whichever is hit first).
+
+### Example Usage
+
+```typescript
+import { Agent, createFindTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createFindTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// Find TypeScript files
+await agent.prompt("Find all TypeScript files in src folder");
+
+// Find all JSON files recursively
+await agent.prompt("Find all JSON files anywhere in the project");
+
+// Find test files
+await agent.prompt("Find all test spec files");
+```
+
+### Output
+
+Returns matching file paths (one per line).
+
+---
+
+## 7. ls - List Directory Contents
+
+List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories.
+
+**Tool Name:** `ls`
+**Label:** `ls`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `path` | string | No | Directory to list (default: current directory) |
+| `limit` | number | No | Maximum number of entries to return (default: 500) |
+
+### Description
+
+List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to **500 entries** or **50KB** (whichever is hit first).
+
+### Example Usage
+
+```typescript
+import { Agent, createLsTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createLsTool(process.cwd()),
+      // ... other tools
+    ]
+  }
+});
+
+// List current directory
+await agent.prompt("List files in the current directory");
+
+// List a specific directory
+await agent.prompt("List contents of the src folder");
+```
+
+### Output
+
+Returns directory entries with '/' suffix for directories.
+
+---
+
+## 8. task - Launch Subagent for Multi-step Tasks
+
+Launch a subagent to handle complex or multi-step work autonomously.
+
+**Tool Name:** `task`
+**Label:** `task`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `description` | string | Yes | A short (3-5 words) description of the task |
+| `prompt` | string | Yes | The task for the subagent to perform |
+| `subagent_type` | string | Yes | The type of specialized subagent to use for this task |
+| `task_id` | string | No | Only set to resume a previous task. The task will continue in the same subagent session as before. |
+| `command` | string | No | The command that triggered this task (optional) |
+
+### Description
+
+Launch a subagent to handle complex or multi-step work autonomously. When using this tool, provide a clear description, a detailed prompt, and `subagent_type`. Use `task_id` to resume a previous task.
+
+### Example Usage
+
+```typescript
+import { Agent, createTaskTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createTaskTool({ cwd: process.cwd() }),
+      // ... other tools
+    ]
+  }
+});
+
+// Create a subagent task
+await agent.prompt("Create a subagent to refactor the authentication module");
+
+// Resume a previous task
+await agent.prompt("Resume the previous refactoring task with task_id xyz");
+```
+
+### Output
+
+Returns the subagent's output.
+
+---
+
+## 9. todo - Todo List Management
+
+Manage todo lists with read and write operations.
+
+**Tool Names:** `todoread`, `todowrite`
+**Labels:** `todoread`, `todowrite`
+
+### Parameters (todoread)
+
+No parameters required.
+
+### Parameters (todowrite)
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `todos` | array | Yes | The updated todo list (each item has: content, status, priority) |
+
+### Description
+
+**todoread** - Read the current todo list. Returns items with content, status, and priority.
+
+**todowrite** - Update the todo list. Provide the full list each time with content, status, and priority fields.
+
+Todo Item Structure:
+- `content`: Brief description of task
+- `status`: `"pending"`, `"in_progress"`, `"completed"`, or `"cancelled"`
+- `priority`: `"high"`, `"medium"`, or `"low"`
+
+### Example Usage
+
+```typescript
+import { Agent, createTodoReadTool, createTodoWriteTool } from "indusagi/agent";
+import { TodoStore } from "indusagi/agent/tools";
+
+const todoStore = new TodoStore();
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createTodoReadTool(todoStore),
+      createTodoWriteTool(todoStore),
+      // ... other tools
+    ]
+  }
+});
+
+// Read todo list
+await agent.prompt("What are my current tasks?");
+
+// Update todo list
+await agent.prompt("Add a new high priority task to implement user authentication");
+```
+
+### Output
+
+Returns the todo list as JSON with incomplete count.
+
+---
+
+## 10. websearch - Search the Web
+
+Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs.
+
+**Tool Name:** `websearch`
+**Label:** `websearch`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `query` | string | Yes | Web search query |
+| `numResults` | number | No | Number of search results to return (default: 8, max: 10) |
+| `livecrawl` | `"fallback" \| "preferred"` | No | Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback') |
+| `type` | `"auto" \| "fast" \| "deep"` | No | Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search |
+| `contextMaxCharacters` | number | No | Maximum characters for context string optimized for LLMs (default: 10000) |
+
+### Description
+
+Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs. Provides up-to-date information for current events and recent data. Supports configurable result counts and returns content from the most relevant websites. Use this tool for accessing information beyond knowledge cutoff. The current year is 2026. You MUST use this year when searching for recent information or current events.
+
+### Example Usage
+
+```typescript
+import { Agent, createWebSearchTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createWebSearchTool(),
+      // ... other tools
+    ]
+  }
+});
+
+// Search for recent information
+await agent.prompt("Search for AI news in 2026");
+
+// Deep search
+await agent.prompt("Do a comprehensive search for TypeScript best practices");
+```
+
+### Output
+
+Returns web search results with content from relevant websites.
+
+---
+
+## 11. webfetch - Fetch Content from URLs
+
+Fetch content from specified URLs. Supports text, markdown, and HTML format options.
+
+**Tool Name:** `webfetch`
+**Label:** `webfetch`
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|-----------|-------------|
+| `url` | string | Yes | The URL to fetch content from (must start with http:// or https://) |
+| `format` | `"text" \| "markdown" \| "html"` | No | The format to return the content in (text, markdown, or html). Defaults to markdown. |
+| `timeout` | number | No | Optional timeout in seconds (max 120). Default: 30 |
+
+### Description
+
+Fetch content from a specified URL. Takes a URL and optional format as input. Fetches URL content, converts to requested format (markdown by default). Returns content in the specified format. Use this tool when you need to retrieve and analyze web content. The URL must be a fully-formed valid URL starting with http:// or https://. Format options: 'markdown' (default), 'text', or 'html'. This tool is read-only and does not modify any files. Results may be summarized if content is very large.
+
+### Example Usage
+
+```typescript
+import { Agent, createWebFetchTool } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createWebFetchTool(),
+      // ... other tools
+    ]
+  }
+});
+
+// Fetch a page as markdown
+await agent.prompt("Fetch the TypeScript documentation from the official website");
+
+// Fetch as text
+await agent.prompt("Fetch the page content as plain text");
+
+// Fetch with custom timeout
+await agent.prompt("Fetch with 60 second timeout");
+```
+
+### Output
+
+Returns the fetched content in the requested format. Images are returned as attachments.
+
+---
+
+## Tool Options
+
+Each tool accepts optional configuration:
+
+```typescript
+import {
+  createReadTool,
+  createBashTool,
+  createEditTool,
+  createWriteTool,
+  createGrepTool,
+  createFindTool,
+  createLsTool,
+  createTaskTool,
+  createTodoReadTool,
+  createTodoWriteTool,
+  createWebSearchTool,
+  createWebFetchTool,
+} from "indusagi/agent";
+```
+
+### Tool-Specific Options
+
+**read** - `ReadToolOptions`
+- `autoResizeImages?: boolean` - Whether to auto-resize images to 2000x2000 max. Default: true
+- `operations?: ReadOperations` - Custom file reading operations (for remote systems)
+
+**bash** - `BashToolOptions`
+- `operations?: BashOperations` - Custom command execution operations
+- `commandPrefix?: string` - Command prefix prepended to every command
+- `hookRunner?: HookRunner` - Hook runner for shell.env hook injection
+
+**edit** - `EditToolOptions`
+- `operations?: EditOperations` - Custom file editing operations
+
+**write** - `WriteToolOptions`
+- `operations?: WriteOperations` - Custom file writing operations
+
+**grep** - `GrepToolOptions`
+- `operations?: GrepOperations` - Custom search operations
+
+**find** - `FindToolOptions`
+- `operations?: FindOperations` - Custom file search operations
+
+**ls** - `LsToolOptions`
+- `operations?: LsOperations` - Custom directory listing operations
+
+**task** - `TaskToolOptions`
+- `cwd?: string` - Working directory
+- `subagentStore?: SubagentStore` - Subagent configuration
+
+**todo** - Uses `TodoStore` directly
+- Pass a `TodoStore` instance when creating tools
+
+**websearch** - `WebSearchToolOptions`
+- `baseUrl?: string` - Custom API base URL
+- `apiKey?: string` - API key for Exa AI
+
+**webfetch** - `WebFetchToolOptions`
+- `maxResponseSize?: number` - Maximum response size in bytes (default: 5MB)
+- `defaultTimeout?: number` - Default timeout in milliseconds (default: 30000)
+
+---
+
+## Factory Functions
+
+Create tools configured for a specific working directory:
+
+```typescript
+import {
+  createCodingTools,
+  createReadOnlyTools,
+  createAllTools,
+} from "indusagi/agent";
+
+// Full access tools
+const tools = createCodingTools(process.cwd(), {
+  read: { autoResizeImages: false },
+  bash: { commandPrefix: "set -e\n" },
+});
+
+// Read-only tools
+const readOnlyTools = createReadOnlyTools(process.cwd());
+
+// All tools as a Record
+const allTools = createAllTools(process.cwd(), {
+  websearch: { apiKey: "your-api-key" },
+  webfetch: { defaultTimeout: 60000 },
+});
+```
+
+---
+
+## Tool Details
+
+Each tool returns a `details` object with additional information:
+
+**read** - `ReadToolDetails`
+- `truncation?: TruncationResult` - Truncation information if output was truncated
+
+**bash** - `BashToolDetails`
+- `truncation?: TruncationResult` - Truncation information
+- `fullOutputPath?: string` - Path to temp file with full output (if truncated)
+
+**edit** - `EditToolDetails`
+- `diff: string` - Unified diff of changes made
+- `firstChangedLine?: number` - Line number of first change (for editor navigation)
+
+**grep** - `GrepToolDetails`
+- `truncation?: TruncationResult` - Truncation information
+- `matchLimitReached?: number` - Limit that was reached
+- `linesTruncated?: boolean` - Whether some lines were truncated
+
+**find** - `FindToolDetails`
+- `truncation?: TruncationResult` - Truncation information
+- `resultLimitReached?: number` - Limit that was reached
+
+**ls** - `LsToolDetails`
+- `truncation?: TruncationResult` - Truncation information
+- `entryLimitReached?: number` - Limit that was reached
+
+**task** - `TaskToolDetails`
+- `description: string` - Task description
+- `prompt: string` - Task prompt
+- `subagentType: string` - Subagent type
+- `taskId?: string` - Task ID (if resuming)
+
+**todo** - `TodoToolDetails`
+- `todos: TodoItem[]` - Array of todo items
+- `incompleteCount: number` - Number of incomplete tasks
+
+**websearch** - `WebSearchToolDetails`
+- `query: string` - Search query
+- `numResults?: number` - Number of results
+- `livecrawl?: "fallback" | "preferred"` - Live crawl mode
+- `type?: "auto" | "fast" | "deep"` - Search type
+
+**webfetch** - `WebFetchToolDetails`
+- `url: string` - Fetched URL
+- `format?: "text" | "markdown" | "html"` - Requested format
+- `timeout?: number` - Timeout used
+- `contentType?: string` - Response content type
+- `fetchedBytes?: number` - Number of bytes fetched
+
+---
+
+## Using Tools
+
+The tools are designed to be used with the `Agent` class:
+
+```typescript
+import { Agent } from "indusagi/agent";
+import { createCodingTools } from "indusagi/agent";
+
+const agent = new Agent({
+  initialState: {
+    systemPrompt: "You are a helpful coding assistant.",
+    tools: createCodingTools(process.cwd()),
+  }
+});
+
+// Start the agent
+await agent.prompt("Analyze this codebase and suggest improvements");
+```
+
+---
+
+## Pluggable Operations
+
+Most tools support pluggable operations for remote execution (SSH, SFTP, etc.):
+
+```typescript
+import { createReadTool, createBashTool } from "indusagi/agent";
+
+// Custom operations example
+const customReadOperations = {
+  readFile: async (absolutePath) => {
+    // Implement custom file reading (e.g., via SSH)
+    return await readFileViaSsh(absolutePath);
+  },
+  access: async (absolutePath) => {
+    // Implement custom access check
+    await checkAccessViaSsh(absolutePath);
+  },
+};
+
+const customBashOperations = {
+  exec: async (command, cwd, { onData, signal }) => {
+    // Implement custom command execution
+    return await execViaSsh(command, cwd, onData, signal);
+  },
+};
+
+const agent = new Agent({
+  initialState: {
+    tools: [
+      createReadTool(process.cwd(), { operations: customReadOperations }),
+      createBashTool(process.cwd(), { operations: customBashOperations }),
+    ],
+  },
+});
+```
+
+---
+
+## Related Documentation
+
+- `api-reference.txt` - Full Agent API reference
+- `README.txt` - Agent module overview
+- `indusagi/src/agent/tools/` - Tool implementations

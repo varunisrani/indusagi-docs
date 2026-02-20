@@ -1,0 +1,125 @@
+# TUI Components Reference
+
+This document lists components exported from `indusagi/tui` and the most important behaviors.
+All components implement `Component` from `indusagi/src/tui/tui.ts`.
+
+## Box
+
+File: `indusagi/src/tui/components/box.ts`
+
+Purpose: container that applies padding and optional background to child components.
+
+Key behaviors:
+
+- `paddingX` and `paddingY` apply left right and top bottom padding.
+- `bgFn` applies a background style function to each line.
+- Uses caching to avoid re-rendering when children and width are unchanged.
+
+## Text
+
+File: `indusagi/src/tui/components/text.ts`
+
+Purpose: wraps and renders multi-line text with ANSI-safe width handling.
+
+Key behaviors:
+
+- Replaces tabs with three spaces.
+- Wraps text to fit width using `wrapTextWithAnsi`.
+- Supports custom background via `customBgFn`.
+
+## Markdown
+
+File: `indusagi/src/tui/components/markdown.ts`
+
+Purpose: renders markdown to terminal text using `marked`.
+
+Key behaviors:
+
+- `MarkdownTheme` defines styling for headings, links, code, quotes, lists, and text styles.
+- `DefaultTextStyle` applies base styling.
+- Optional `highlightCode` callback can inject syntax highlighting.
+
+## Input
+
+File: `indusagi/src/tui/components/input.ts`
+
+Purpose: single-line input with cursor, deletion, and bracketed paste support.
+
+Key behaviors:
+
+- Uses `EditorKeybindingsManager` for key mappings.
+- Supports `onSubmit` and `onEscape` callbacks.
+- Maintains a cursor position with grapheme-aware movement.
+
+## Editor
+
+File: `indusagi/src/tui/components/editor.ts`
+
+Purpose: multi-line editor with history, undo, and autocomplete.
+
+Key features:
+
+- Word-wrapping with cursor-aware layout.
+- Prompt history navigation with up and down keys.
+- Kill ring and yank operations.
+- Undo support with coalescing.
+- Autocomplete integration using `AutocompleteProvider` and `SelectList`.
+- `getText` and `getExpandedText` for plain or paste-expanded content.
+
+## Image
+
+File: `indusagi/src/tui/components/image.ts`
+
+Purpose: render base64 images using terminal protocols or a fallback placeholder.
+
+Key behaviors:
+
+- Uses `getCapabilities` and `renderImage` from `terminal-image`.
+- Accepts `maxWidthCells`, `maxHeightCells`, optional `imageId`.
+
+## Loader and CancellableLoader
+
+Files: `indusagi/src/tui/components/loader.ts` and `indusagi/src/tui/components/cancellable-loader.ts`
+
+Purpose: animated spinner with optional cancellation.
+
+Key behaviors:
+
+- `Loader` updates every 80ms and triggers `TUI.requestRender`.
+- `CancellableLoader` exposes `signal` and cancels on the `selectCancel` key.
+
+## Spacer
+
+File: `indusagi/src/tui/components/spacer.ts`
+
+Purpose: render a fixed number of empty lines.
+
+## SelectList
+
+File: `indusagi/src/tui/components/select-list.ts`
+
+Purpose: scrollable list with selection and keyboard navigation.
+
+Key behaviors:
+
+- Wrap-around navigation.
+- Optional item descriptions.
+- Emits `onSelect`, `onCancel`, and `onSelectionChange`.
+
+## SettingsList
+
+File: `indusagi/src/tui/components/settings-list.ts`
+
+Purpose: settings UI with optional search and submenus.
+
+Key behaviors:
+
+- Supports value cycling using `values`.
+- Supports `submenu` components.
+- Optional search input filters items via fuzzy match.
+
+## TruncatedText
+
+File: `indusagi/src/tui/components/truncated-text.ts`
+
+Purpose: renders only the first line, truncated to width.

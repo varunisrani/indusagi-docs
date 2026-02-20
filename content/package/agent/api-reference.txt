@@ -1,0 +1,68 @@
+# Agent API Reference
+
+This describes the public API from `indusagi/agent`.
+Types are defined in `indusagi/src/agent/types.ts` and behavior in `indusagi/src/agent/agent.ts`.
+
+## Agent Class
+
+Constructor options (`AgentOptions`):
+
+- `initialState?: Partial<AgentState>`
+- `convertToLlm?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>`
+- `transformContext?: (messages: AgentMessage[], signal?) => Promise<AgentMessage[]>`
+- `steeringMode?: "all" | "one-at-a-time"`
+- `followUpMode?: "all" | "one-at-a-time"`
+- `streamFn?: StreamFn`
+- `sessionId?: string`
+- `getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined`
+- `thinkingBudgets?: ThinkingBudgets`
+
+Key methods:
+
+- `prompt(input)` accepts string, `AgentMessage`, or `AgentMessage[]`.
+- `continue()` resumes after user or tool messages in context.
+- `abort()` cancels an in-flight request.
+- `steer(message)` injects a message after the current tool execution.
+- `followUp(message)` runs when the agent would otherwise stop.
+- `subscribe(listener)` receives `AgentEvent` updates.
+
+State accessors:
+
+- `state` provides the current `AgentState`.
+- `sessionId` getter and setter.
+- `thinkingBudgets` getter and setter.
+
+## AgentState
+
+Fields:
+
+- `systemPrompt`
+- `model`
+- `thinkingLevel`
+- `tools`
+- `messages`
+- `isStreaming`
+- `streamMessage`
+- `pendingToolCalls`
+- `error`
+
+## AgentEvent
+
+Events emitted by the loop:
+
+- `agent_start`, `agent_end`
+- `turn_start`, `turn_end`
+- `message_start`, `message_update`, `message_end`
+- `tool_execution_start`, `tool_execution_update`, `tool_execution_end`
+
+## Tool Types
+
+`AgentTool` extends `Tool` with:
+
+- `label: string`
+- `execute(toolCallId, params, signal, onUpdate)`
+
+`AgentToolResult` contains:
+
+- `content: (TextContent | ImageContent)[]`
+- `details: TDetails`

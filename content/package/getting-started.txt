@@ -1,0 +1,69 @@
+# Getting Started
+
+## Install
+
+```bash
+npm install indusagi
+```
+
+## Peer Dependencies
+
+The Web UI components expect these peer dependencies:
+
+- `lit`
+- `@mariozechner/mini-lit`
+
+## Quick Import Map
+
+```ts
+import * as indusagi from "indusagi";
+import { getModel, streamSimple } from "indusagi/ai";
+import { Agent } from "indusagi/agent";
+import { TUI, ProcessTerminal } from "indusagi/tui";
+import { ChatPanel } from "indusagi/webui";
+```
+
+## Minimal Streaming Example
+
+```ts
+import { getModel, streamSimple } from "indusagi/ai";
+
+const model = getModel("openai", "gpt-4.1-mini");
+const context = {
+  systemPrompt: "You are helpful.",
+  messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+};
+
+const stream = streamSimple(model, context, { apiKey: process.env.OPENAI_API_KEY });
+for await (const event of stream) {
+  if (event.type === "text_delta") process.stdout.write(event.delta);
+}
+```
+
+## Minimal Agent Example
+
+```ts
+import { Agent } from "indusagi/agent";
+import { getModel } from "indusagi/ai";
+
+const agent = new Agent({
+  initialState: {
+    model: getModel("google", "gemini-2.5-flash-lite-preview-06-17"),
+  },
+});
+
+agent.subscribe((e) => {
+  if (e.type === "message_end" && e.message.role === "assistant") {
+    const text = e.message.content.find((c) => c.type === "text")?.text;
+    if (text) console.log(text);
+  }
+});
+
+await agent.prompt("Hello from Agent");
+```
+
+## Notes
+
+- The package is ESM only (`"type": "module"`).
+- Node 20 or newer is required.
+- Use `indusagi/ai` for provider access, `indusagi/agent` for the agent loop, `indusagi/tui` for terminal UI, and `indusagi/webui` for the browser UI.

@@ -1,0 +1,378 @@
+# Hooks
+
+Hooks are TypeScript modules that intercept and modify internal operations. Unlike extensions (which use event-based APIs), hooks use a simpler input/output transformation model for specific injection points.
+
+> **Note**: Most customization should use [extensions](extensions.md) instead. Hooks are lower-level and intended for specific use cases where you need to transform data at well-defined points.
+
+## When to Use Hooks vs Extensions
+
+| Use Hooks When | Use Extensions When |
+|----------------|---------------------|
+| Transforming chat parameters | Listening to lifecycle events |
+| Modifying tool arguments/results | Registering custom tools |
+| Adding custom headers to requests | Adding slash commands |
+| Transforming system prompts | Building interactive UIs |
+| Modifying shell environment | Stateful tool implementations |
+
+## Hook Locations
+
+Hooks are loaded from:
+
+- Global: `~/.indusagi/agent/hooks/*.ts`
+- Project: `.indusagi/hooks/*.ts`
+- Settings: `hooks` array in `settings.json`
+- CLI: `--hook <path>` flag
+
+## Hook File Format
+
+A hook file exports a factory function that receives context and returns hook handlers:
+
+```typescript
+import type { HookFactory } from "indusagi-coding-agent";
+
+export default ((ctx) => {
+  console.log(`Hooks loading in: ${ctx.cwd}`);
+
+  return {
+    // Hook handlers go here
+    "tool.execute.before": async (input, output) => {
+      // Modify tool arguments before execution
+    },
+  };
+}) satisfies HookFactory;
+```
+
+### HookInitContext
+
+The factory receives an initialization context:
+
+```typescript
+interface HookInitContext {
+  cwd: string;           // Current working directory
+  agentDir: string;      // Agent config directory
+  events: EventBus;      // Shared event bus
+  exec: (command: string, args: string[], options?: ExecOptions) => Promise<ExecResult>;
+}
+```
+
+## Available Hooks
+
+### chat.params
+
+Modify streaming parameters before calling the LLM.
+
+```typescript
+"chat.params": async (input, output) => {
+  // input: { sessionId, model, systemPrompt }
+  // output: { options: SimpleStreamOptions }
+
+  // Add custom timeout
+  output.options.timeout = 60000;
+
+  // Enable caching
+  output.options.caching = true;
+}
+```
+
+### chat.headers
+
+Add custom headers to LLM requests.
+
+```typescript
+"chat.headers": async (input, output) => {
+  // input: { sessionId, model, systemPrompt }
+  // output: { headers: Record<string, string> }
+
+  // Add custom headers
+  output.headers["x-custom-header"] = "value";
+  output.headers["x-request-id"] = input.sessionId;
+}
+```
+
+### chat.message
+
+Transform user messages before sending to LLM.
+
+```typescript
+"chat.message": async (input, output) => {
+  // input: { sessionId, model? }
+  // output: { content: (TextContent | ImageContent)[] }
+
+  // Prepend context to message
+  output.content = [
+    { type: "text", text: "Additional context:\n" },
+    ...output.content,
+  ];
+}
+```
+
+### tool.execute.before
+
+Modify tool arguments before execution.
+
+```typescript
+"tool.execute.before": async (input, output) => {
+  // input: { tool, sessionId, callId }
+  // output: { args: Record<string, unknown> }
+
+  if (input.tool === "bash") {
+    // Log all bash commands
+    console.log(`Bash: ${output.args.command}`);
+
+    // Inject environment variable
+    output.args.command = `export CUSTOM_VAR=1 && ${output.args.command}`;
+  }
+
+  if (input.tool === "write") {
+    // Block writes to sensitive paths
+    if (String(output.args.path).includes(".env")) {
+      throw new Error("Cannot write to .env files");
+    }
+  }
+}
+```
+
+### tool.execute.after
+
+Transform tool results after execution.
+
+```typescript
+"tool.execute.after": async (input, output) => {
+  // input: { tool, sessionId, callId, args }
+  // output: { content, details, isError }
+
+  if (input.tool === "bash" && !output.isError) {
+    // Truncate long output
+    const text = output.content[0];
+    if (text?.type === "text" && text.text.length > 10000) {
+      output.content = [{
+        type: "text",
+        text: text.text.slice(0, 10000) + "\n... (truncated)",
+      }];
+    }
+  }
+}
+```
+
+### tool.definition
+
+Modify tool descriptions and parameters.
+
+```typescript
+"tool.definition": async (input, output) => {
+  // input: { toolId }
+  // output: { description, parameters }
+
+  if (input.toolId === "bash") {
+    // Add usage examples to description
+    output.description += "\n\nExamples:\n- List files: `ls -la`\n- Find text: `grep -r 'pattern' .`";
+  }
+}
+```
+
+### shell.env
+
+Inject environment variables into shell sessions.
+
+```typescript
+"shell.env": async (input, output) => {
+  // input: { cwd }
+  // output: { env: Record<string, string> }
+
+  // Add custom environment
+  output.env["MY_PROJECT_ROOT"] = input.cwd;
+  output.env["NODE_ENV"] = "development";
+
+  // Load from .env file
+  const dotenv = await import("dotenv");
+  const config = dotenv.config({ path: `${input.cwd}/.env` });
+  if (config.parsed) {
+    Object.assign(output.env, config.parsed);
+  }
+}
+```
+
+### command.execute.before
+
+Transform extension command arguments.
+
+```typescript
+"command.execute.before": async (input, output) => {
+  // input: { sessionId, command, args }
+  // output: { args: string }
+
+  if (input.command === "mycommand") {
+    // Preprocess arguments
+    output.args = output.args.toUpperCase();
+  }
+}
+```
+
+## Experimental Hooks
+
+These hooks are experimental and may change:
+
+### experimental.chat.system.transform
+
+Transform the system prompt.
+
+```typescript
+"experimental.chat.system.transform": async (input, output) => {
+  // input: { sessionId, model }
+  // output: { system: string }
+
+  // Append custom instructions
+  output.system += "\n\nAdditional instructions:\n- Be concise\n- Focus on code quality";
+}
+```
+
+### experimental.chat.messages.transform
+
+Transform the message history.
+
+```typescript
+"experimental.chat.messages.transform": async (input, output) => {
+  // input: { sessionId }
+  // output: { messages: AgentMessage[] }
+
+  // Filter out old messages
+  const cutoff = Date.now() - 3600000; // 1 hour
+  output.messages = output.messages.filter(
+    (m) => m.timestamp > cutoff
+  );
+}
+```
+
+### experimental.session.compacting
+
+Customize session compaction.
+
+```typescript
+"experimental.session.compacting": async (input, output) => {
+  // input: { sessionId }
+  // output: { context: string[], prompt?: string }
+
+  // Custom compaction prompt
+  output.prompt = "Summarize this conversation focusing on:\n- Decisions made\n- Files modified\n- Pending tasks";
+}
+```
+
+### experimental.text.complete
+
+Transform auto-complete suggestions.
+
+```typescript
+"experimental.text.complete": async (input, output) => {
+  // input: { sessionId }
+  // output: { text: string }
+
+  // Post-process completion
+  output.text = output.text.trim();
+}
+```
+
+## Error Handling
+
+Hook errors are logged but don't crash the session:
+
+```typescript
+"tool.execute.before": async (input, output) => {
+  throw new Error("This error is logged, session continues");
+}
+```
+
+To abort an operation, modify the output appropriately:
+
+```typescript
+"tool.execute.before": async (input, output) => {
+  // Block by throwing with specific message
+  if (forbiddenOperation(output.args)) {
+    throw new Error("Operation blocked by security policy");
+  }
+}
+```
+
+## Complete Example
+
+```typescript
+// ~/.indusagi/agent/hooks/audit-logger.ts
+import type { HookFactory } from "indusagi-coding-agent";
+import * as fs from "fs";
+import * as path from "path";
+
+export default ((ctx) => {
+  const logFile = path.join(ctx.agentDir, "audit.log");
+
+  function log(entry: object) {
+    const line = JSON.stringify({ ...entry, timestamp: new Date().toISOString() }) + "\n";
+    fs.appendFileSync(logFile, line);
+  }
+
+  return {
+    "tool.execute.before": async (input, output) => {
+      log({
+        event: "tool_start",
+        tool: input.tool,
+        callId: input.callId,
+        args: output.args,
+      });
+    },
+
+    "tool.execute.after": async (input, output) => {
+      log({
+        event: "tool_end",
+        tool: input.tool,
+        callId: input.callId,
+        isError: output.isError,
+      });
+    },
+
+    "shell.env": async (input, output) => {
+      log({
+        event: "shell_start",
+        cwd: input.cwd,
+      });
+    },
+  };
+}) satisfies HookFactory;
+```
+
+## Loading Hooks
+
+### Via Settings
+
+```json
+{
+  "hooks": [
+    "~/.indusagi/agent/hooks/audit-logger.ts",
+    ".indusagi/hooks/project-hooks.ts"
+  ]
+}
+```
+
+### Via CLI
+
+```bash
+indusagi --hook ./my-hooks.ts
+```
+
+### Programmatically
+
+```typescript
+import { loadHooks, discoverHooksInDir, DefaultResourceLoader } from "indusagi-coding-agent";
+
+// Discover hooks in a directory
+const hookPaths = discoverHooksInDir("./hooks");
+
+// Load hooks
+const result = await loadHooks(hookPaths, process.cwd());
+if (result.errors.length > 0) {
+  console.error("Hook errors:", result.errors);
+}
+```
+
+## Related
+
+- [Extensions](extensions.md) - Higher-level customization API
+- [SDK](sdk.md) - Programmatic usage
+- [Settings](settings.md) - Configuration options
