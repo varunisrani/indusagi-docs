@@ -1,0 +1,32 @@
+# Web UI i18n and Formatting
+
+This document covers localization and usage formatting utilities in `indusagi/src/webui/utils`.
+
+## Localization (`i18n.ts`)
+
+File: `indusagi/src/webui/utils/i18n.ts`
+
+Key behaviors:
+
+- Extends mini-lit `i18nMessages` to include all UI strings used in the Web UI.
+- Defines `translations` for English (`en`) and German (`de`).
+- Calls `setTranslations(translations)` on module load.
+- Re-exports mini-lit i18n helpers from `@mariozechner/mini-lit/dist/i18n.js`.
+
+Usage:
+
+- Use `i18n("Key")` to translate a string in components and dialogs.
+- Switch locale via mini-lit helpers such as `setLocale` (re-exported).
+
+## Formatting Helpers (`format.ts`)
+
+File: `indusagi/src/webui/utils/format.ts`
+
+Functions:
+
+- `formatCost(cost)` formats total cost as `$0.0000`.
+- `formatModelCost(cost)` formats input/output prices as `$x/$y` and returns `Free` when absent.
+- `formatUsage(usage)` formats usage into tokens and cost tokens like `↑12k ↓4k R1k W500 $0.0123`.
+- `formatTokenCount(count)` formats token counts using `k` abbreviations.
+
+Usage is rendered in `assistant-message`, `session-list-dialog`, and tool renderers.

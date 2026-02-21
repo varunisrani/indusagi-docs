@@ -1,0 +1,86 @@
+# Tools and Artifacts
+
+This module contains tool rendering and artifact management for the Web UI.
+
+## Tool Rendering
+
+Files:
+
+- `webui/tools/index.ts`
+- `webui/tools/renderer-registry.ts`
+- `webui/tools/types.ts`
+
+Key API:
+
+- `registerToolRenderer(toolName, renderer)`
+- `getToolRenderer(toolName)`
+- `renderTool(toolName, params, result, isStreaming)`
+- `setShowJsonMode(enabled)`
+
+Built-in renderers:
+
+- `BashRenderer` for tool name `bash`
+- `DefaultRenderer` for fallback
+- `CalculateRenderer` for `calculate`
+- `GetCurrentTimeRenderer` for `get_current_time`
+
+## Attachments
+
+File: `webui/utils/attachment-utils.ts`
+
+- `Attachment` includes `id`, `type`, `fileName`, `mimeType`, `size`, `content` and optional `extractedText`.
+- `loadAttachment(source, fileName?)` accepts URL, `File`, `Blob`, or `ArrayBuffer`.
+- Supported formats include PDF, DOCX, PPTX, XLSX/XLS, images, and text files.
+
+## JavaScript REPL Tool
+
+File: `webui/tools/javascript-repl.ts`
+
+- Tool name: `javascript_repl`
+- Parameters: `title`, `code`
+- Executes in a sandboxed iframe and captures console output.
+- Supports runtime providers for attachments and artifacts.
+
+## Extract Document Tool
+
+File: `webui/tools/extract-document.ts`
+
+- Tool name: `extract_document`
+- Parameters: `url`
+- Downloads and extracts text from PDF, DOCX, XLSX, PPTX.
+- Can use a CORS proxy when direct fetch fails.
+
+## Artifacts
+
+Files:
+
+- `webui/tools/artifacts/artifacts.ts`
+- `webui/tools/artifacts/*`
+
+Artifacts are persistent files stored alongside the session.
+The artifacts tool supports actions:
+
+- `create`, `update`, `rewrite`, `get`, `delete`, `logs`
+
+Artifact renderers include:
+
+- HTML, SVG, Markdown, Image, PDF, Excel, DOCX, Text, Generic
+
+`ArtifactsPanel` also registers an `ArtifactsToolRenderer` to display results in the UI.
+
+## Sandbox and Runtime Providers
+
+Files:
+
+- `webui/components/SandboxedIframe.ts`
+- `webui/components/sandbox/*`
+
+`SandboxedIframe` executes code in a sandbox and routes messages via `RuntimeMessageRouter`.
+Runtime providers inject data and helper functions into the sandbox.
+Built-in providers include:
+
+- `ArtifactsRuntimeProvider`
+- `AttachmentsRuntimeProvider`
+- `ConsoleRuntimeProvider`
+- `FileDownloadRuntimeProvider`
+

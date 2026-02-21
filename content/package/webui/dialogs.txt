@@ -1,0 +1,132 @@
+# Web UI Dialogs
+
+Dialogs live under `indusagi/src/webui/dialogs` and use the mini-lit `Dialog`/`DialogBase` components.
+
+## Model Selector
+
+File: `indusagi/src/webui/dialogs/ModelSelector.ts`
+
+Custom element: `agent-model-selector`
+
+Key API:
+
+- `ModelSelector.open(currentModel, onSelect)` opens the dialog and resolves via callback.
+
+Behavior notes:
+
+- Loads models from built-in providers and custom providers.
+- Supports search, thinking and vision filters, and keyboard navigation.
+- Uses `discoverModels()` for auto-discovery providers.
+- Displays model pricing using `formatModelCost()`.
+
+## Settings Dialog
+
+File: `indusagi/src/webui/dialogs/SettingsDialog.ts`
+
+Custom element: `settings-dialog`
+
+Key API:
+
+- `SettingsDialog.open(tabs)` opens with a list of `SettingsTab` instances.
+
+Tabs provided in this file:
+
+- `ApiKeysTab` renders `provider-key-input` for each known provider.
+- `ProxyTab` manages `proxy.enabled` and `proxy.url` in settings storage.
+
+Behavior notes:
+
+- Desktop uses a sidebar tab layout; mobile uses horizontal tabs.
+- Tabs render inside a `Dialog` wrapper with custom width and height.
+
+## Providers & Models Tab
+
+File: `indusagi/src/webui/dialogs/ProvidersModelsTab.ts`
+
+Custom element: `providers-models-tab`
+
+Key behaviors:
+
+- Shows known cloud providers and their API keys.
+- Manages custom providers for `ollama`, `llama.cpp`, `vllm`, `lmstudio`, and compatibility adapters.
+- Uses `CustomProviderDialog` for add and edit flows.
+- Uses `discoverModels()` to check status and populate model counts.
+
+## Custom Provider Dialog
+
+File: `indusagi/src/webui/dialogs/CustomProviderDialog.ts`
+
+This is a dialog class (not a custom element) created with `new CustomProviderDialog()`.
+
+Key API:
+
+- `CustomProviderDialog.open(provider?, initialType?, onSave?)`.
+
+Behavior notes:
+
+- Auto-discovery types support "Test Connection" to list models.
+- Manual types store their model list for later editing.
+- Saved providers are stored in `customProviders` store.
+
+## API Key Prompt Dialog
+
+File: `indusagi/src/webui/dialogs/ApiKeyPromptDialog.ts`
+
+Custom element: `api-key-prompt-dialog`
+
+Key API:
+
+- `ApiKeyPromptDialog.prompt(provider)` opens the dialog and resolves to `true` when a key is saved.
+
+Behavior notes:
+
+- Polls `AppStorage.providerKeys` until a key is detected or dialog is closed.
+
+## Session List Dialog
+
+File: `indusagi/src/webui/dialogs/SessionListDialog.ts`
+
+Custom element: `session-list-dialog`
+
+Key API:
+
+- `SessionListDialog.open(onSelect, onDelete?)`.
+
+Behavior notes:
+
+- Loads session metadata from `SessionsStore`.
+- Displays relative dates and usage summary.
+- Allows deletion with confirmation.
+
+## Persistent Storage Dialog
+
+File: `indusagi/src/webui/dialogs/PersistentStorageDialog.ts`
+
+Custom element: `persistent-storage-dialog`
+
+Key API:
+
+- `PersistentStorageDialog.request()` prompts for persistent storage and calls `navigator.storage.persist()`.
+
+Behavior notes:
+
+- Returns `false` if the user declines or the browser denies the request.
+
+## Attachment Overlay
+
+File: `indusagi/src/webui/dialogs/AttachmentOverlay.ts`
+
+Custom element: `attachment-overlay`
+
+Key API:
+
+- `AttachmentOverlay.open(attachment, onClose?)` opens a full-screen viewer.
+
+Behavior notes:
+
+- Images are shown directly.
+- PDF uses `pdfjs-dist` to render pages.
+- DOCX uses `docx-preview`.
+- XLSX/XLS uses `xlsx` to render a table.
+- PPTX falls back to extracted text display.
+- Offers an extracted text toggle when available and a download button.

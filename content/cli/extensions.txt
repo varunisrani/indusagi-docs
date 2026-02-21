@@ -101,6 +101,12 @@ Test with `--extension` (or `-e`) flag:
 indusagi -e ./my-extension.ts
 ```
 
+Example: load the `indus-swarms` extension entry directly:
+
+```bash
+indusagi -e ./node_modules/indus-swarms/extensions/teams/index.ts
+```
+
 ## Extension Locations
 
 > **Security:** Extensions run with your full system permissions and can execute arbitrary code. Only install from sources you trust.
@@ -119,6 +125,7 @@ Additional paths via `settings.json`:
 ```json
 {
   "packages": [
+    "npm:indus-swarms",
     "npm:@foo/bar@1.0.0",
     "git:github.com/user/repo@v1"
   ],
@@ -139,6 +146,7 @@ To share extensions via npm or git as indusagi packages, see [packages.md](packa
 | `@sinclair/typebox` | Schema definitions for tool parameters |
 | `indusagi-ai` | AI utilities (`StringEnum` for Google-compatible enums) |
 | `indusagi-tui` | TUI components for custom rendering |
+| `indus-swarms` | Multi-agent, Claude Teams-style extension (publishes `pi-agent-teams`) |
 
 npm dependencies work too. Add a `package.json` next to your extension (or in a parent directory), run `npm install`, and imports from `node_modules/` are resolved automatically.
 

@@ -1,0 +1,125 @@
+# Web UI Sandbox Runtime
+
+The sandbox runtime executes JavaScript and HTML in a locked-down iframe and exposes helper APIs to code.
+It powers the `javascript_repl` tool and HTML artifacts.
+
+## Core Types
+
+File: `indusagi/src/webui/components/SandboxedIframe.ts`
+
+- `SandboxFile` describes a returned file: `fileName`, `content`, `mimeType`.
+- `SandboxResult` includes `success`, `console`, `files`, `error`, and optional `returnValue`.
+- `SandboxUrlProvider` returns a URL to `sandbox.html` for extension contexts.
+- `PrepareHtmlOptions` controls HTML wrapping and standalone mode.
+
+## SandboxedIframe (`sandbox-iframe`)
+
+Key methods:
+
+- `loadContent(sandboxId, htmlContent, providers?, consumers?)` loads HTML and keeps it visible.
+- `execute(sandboxId, code, providers?, consumers?, signal?, isHtmlArtifact?)` runs code and resolves to `SandboxResult`.
+- `prepareHtmlDocument(sandboxId, userCode, providers?, options?)` injects runtime + user code.
+
+Behavior notes:
+
+- Injects `ConsoleRuntimeProvider` automatically as the first provider.
+- Supports two modes: srcdoc (web) and `sandboxUrlProvider` (extension CSP).
+- HTML is validated with `DOMParser` before execution.
+- Execution uses a 120 second timeout and honors `AbortSignal`.
+- For HTML artifacts, the runtime is injected into existing `<head>` or `<html>` tags when present.
+
+## Runtime Message Router
+
+File: `indusagi/src/webui/components/sandbox/RuntimeMessageRouter.ts`
+
+`RUNTIME_MESSAGE_ROUTER` is a singleton that:
+
+- Registers sandboxes and providers via `registerSandbox`.
+- Receives messages from iframes or user scripts and routes them to providers and consumers.
+- Sends responses back to the iframe via `runtime-response`.
+- Cleans up global listeners when the last sandbox is removed.
+
+## Runtime Message Bridge
+
+File: `indusagi/src/webui/components/sandbox/RuntimeMessageBridge.ts`
+
+`RuntimeMessageBridge.generateBridgeCode()` injects:
+
+- `window.sendRuntimeMessage(message)` for request/response messaging.
+- `window.onCompleted(callback)` to register completion callbacks.
+
+It supports both iframe and `chrome.runtime.sendMessage` user-script contexts.
+
+## Runtime Providers
+
+File: `indusagi/src/webui/components/sandbox/SandboxRuntimeProvider.ts`
+
+Providers must implement:
+
+- `getData()` to expose data on `window`.
+- `getRuntime()` to inject runtime functions (stringified).
+- `getDescription()` to document capabilities for LLM tool prompts.
+
+Optional hooks:
+
+- `handleMessage(message, respond)` for bidirectional messaging.
+- `onExecutionStart(sandboxId, signal?)` and `onExecutionEnd(sandboxId)`.
+
+### ArtifactsRuntimeProvider
+
+File: `indusagi/src/webui/components/sandbox/ArtifactsRuntimeProvider.ts`
+
+Injected functions:
+
+- `listArtifacts()`
+- `getArtifact(filename)`
+- `createOrUpdateArtifact(filename, content, mimeType?)`
+- `deleteArtifact(filename)`
+
+Behavior notes:
+
+- Online mode uses runtime messaging to the artifacts tool.
+- Offline mode exposes a read-only snapshot via `window.artifacts`.
+- JSON files auto-parse and auto-stringify.
+
+### AttachmentsRuntimeProvider
+
+File: `indusagi/src/webui/components/sandbox/AttachmentsRuntimeProvider.ts`
+
+Injected functions:
+
+- `listAttachments()`
+- `readTextAttachment(id)`
+- `readBinaryAttachment(id)`
+
+Behavior notes:
+
+- Works in both online and offline modes with a read-only snapshot.
+- `readTextAttachment` uses extracted text if available, otherwise base64 decode.
+
+### ConsoleRuntimeProvider
+
+File: `indusagi/src/webui/components/sandbox/ConsoleRuntimeProvider.ts`
+
+Injected behavior:
+
+- Wraps `console.log`, `console.warn`, `console.error`, `console.info`.
+- Sends console output to the host and stores logs for the caller.
+- Exposes `window.complete(error?, returnValue?)` for execution completion.
+
+Usage note:
+
+- This provider is required and should be first in the provider list.
+
+### FileDownloadRuntimeProvider
+
+File: `indusagi/src/webui/components/sandbox/FileDownloadRuntimeProvider.ts`
+
+Injected function:
+
+- `returnDownloadableFile(filename, content, mimeType?)`
+
+Behavior notes:
+
+- Online mode sends files back via runtime messages.
+- Offline mode creates a browser download directly.
