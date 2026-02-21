@@ -6,12 +6,11 @@ import { renderMarkdown } from "./markdown";
 const CONTENT_DIR = path.join(process.cwd(), "content");
 
 // Indusagi package sections
-const PACKAGE_SECTION_ORDER = ["Start", "AI", "Agent", "TUI", "Web UI", "Reference"];
+const PACKAGE_SECTION_ORDER = ["Start", "AI", "Agent", "TUI", "Reference"];
 const PACKAGE_SECTION_MAP: Array<{ prefix: string; section: string }> = [
   { prefix: "ai/", section: "AI" },
   { prefix: "agent/", section: "Agent" },
   { prefix: "tui/", section: "TUI" },
-  { prefix: "webui/", section: "Web UI" },
 ];
 const PACKAGE_SPECIAL_ORDER: Record<string, number> = {
   "README": 0,

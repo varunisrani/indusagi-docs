@@ -22,8 +22,6 @@ const docsStructure = {
       { title: "Agent Loop & Tools", slug: "agent/loop-and-tools" },
       { title: "TUI Overview", slug: "tui/README" },
       { title: "TUI Components", slug: "tui/components" },
-      { title: "Web UI Overview", slug: "webui/README" },
-      { title: "Web UI Components", slug: "webui/components" },
     ]
   },
   cli: {

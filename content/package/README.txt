@@ -1,6 +1,6 @@
 # indusagi Documentation
 
-This folder documents the `indusagi` package located at `indusagi/`. It is an all-in-one bundle that re-exports AI providers, agent loop, TUI widgets, and a Web UI.
+This folder documents the `indusagi` package located at `indusagi/`. It is an all-in-one bundle that re-exports AI providers, agent loop, and TUI widgets.
 
 If you want a quick start, read the [Getting Started](/docs/getting-started) guide.
 
@@ -32,17 +32,6 @@ If you want a quick start, read the [Getting Started](/docs/getting-started) gui
 - [TUI Components](/docs/tui/components)
 - [Input and Keys](/docs/tui/input-and-keys)
 - [Images in TUI](/docs/tui/images)
-
-### Web UI
-
-- [Web UI Overview](/docs/webui/README)
-- [Web UI Components](/docs/webui/components)
-- [Tools and Artifacts](/docs/webui/tools-and-artifacts)
-- [Sandbox](/docs/webui/sandbox)
-- [Storage and Settings](/docs/webui/storage-and-settings)
-- [Dialogs](/docs/webui/dialogs)
-- [i18n and Formatting](/docs/webui/i18n-and-formatting)
-- [Styles](/docs/webui/styles)
 
 ## Notes
 

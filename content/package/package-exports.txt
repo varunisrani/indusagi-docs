@@ -8,18 +8,16 @@
 - `indusagi/ai` -> `dist/ai.js` and `dist/ai.d.ts`
 - `indusagi/agent` -> `dist/agent.js` and `dist/agent.d.ts`
 - `indusagi/tui` -> `dist/tui.js` and `dist/tui.d.ts`
-- `indusagi/webui` -> `dist/webui.js` and `dist/webui.d.ts`
 - `indusagi/coding-agent` -> `dist/coding-agent.js` and `dist/coding-agent.d.ts`
 
 ## Source Mapping
 
 These entrypoints map to source files under `indusagi/src`:
 
-- `indusagi/src/index.ts` re-exports `ai`, `agent`, `tui`, `webui`, and `coding-agent`.
+- `indusagi/src/index.ts` re-exports `ai`, `agent`, `tui`, and `coding-agent`.
 - `indusagi/src/ai.ts` re-exports `indusagi/src/ai/index.ts`.
 - `indusagi/src/agent.ts` re-exports `indusagi/src/agent/index.ts`.
 - `indusagi/src/tui.ts` re-exports `indusagi/src/tui/index.ts`.
-- `indusagi/src/webui.ts` re-exports `indusagi/src/webui/index.ts`.
 
 `indusagi/coding-agent` is exported by `package.json`, but there is no `indusagi/src/coding-agent.ts` in this repository.
 If the build expects this entrypoint, ensure it is generated or added.

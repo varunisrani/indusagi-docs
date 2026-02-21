@@ -9,7 +9,7 @@ type DocsNavProps = {
   activeSlug: string;
 };
 
-const SECTION_ORDER = ["Start", "AI", "Agent", "TUI", "Web UI", "Reference"];
+const SECTION_ORDER = ["Start", "AI", "Agent", "TUI", "Reference"];
 
 export default function DocsNav({ docs, activeSlug }: DocsNavProps) {
   const [query, setQuery] = useState("");

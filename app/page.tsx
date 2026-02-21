@@ -37,7 +37,7 @@ export default function Home() {
                     TypeScript SDK & Components
                   </p>
                   <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
-                    All-in-one bundle: AI providers, agent loop, TUI widgets, and Web UI components.
+                    All-in-one bundle: AI providers, agent loop, and TUI widgets.
                     Build your own agent interfaces.
                   </p>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
@@ -49,9 +49,6 @@ export default function Home() {
                     </span>
                     <span className="tag rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
                       TUI
-                    </span>
-                    <span className="tag rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Web UI
                     </span>
                   </div>
                 </div>

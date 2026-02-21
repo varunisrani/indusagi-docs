@@ -6,13 +6,6 @@
 npm install indusagi
 ```
 
-## Peer Dependencies
-
-The Web UI components expect these peer dependencies:
-
-- `lit`
-- `@mariozechner/mini-lit`
-
 ## Quick Import Map
 
 ```ts
@@ -20,7 +13,6 @@ import * as indusagi from "indusagi";
 import { getModel, streamSimple } from "indusagi/ai";
 import { Agent } from "indusagi/agent";
 import { TUI, ProcessTerminal } from "indusagi/tui";
-import { ChatPanel } from "indusagi/webui";
 ```
 
 ## Minimal Streaming Example
@@ -66,4 +58,4 @@ await agent.prompt("Hello from Agent");
 
 - The package is ESM only (`"type": "module"`).
 - Node 20 or newer is required.
-- Use `indusagi/ai` for provider access, `indusagi/agent` for the agent loop, `indusagi/tui` for terminal UI, and `indusagi/webui` for the browser UI.
+- Use `indusagi/ai` for provider access, `indusagi/agent` for the agent loop, and `indusagi/tui` for terminal UI.

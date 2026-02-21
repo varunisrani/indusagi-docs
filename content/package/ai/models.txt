@@ -37,8 +37,3 @@ Other providers clamp `xhigh` to `high`.
 
 `Model.compat` allows overriding behavior for OpenAI-compatible providers.
 See `indusagi/docs/ai/providers.md` for the full compatibility fields.
-
-## Custom Models
-
-The Web UI supports custom providers and model discovery.
-See `indusagi/docs/webui/storage-and-settings.md` and `indusagi/docs/webui/sandbox.md`.
