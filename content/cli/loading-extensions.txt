@@ -1,0 +1,198 @@
+> Extensions enable powerful customization. Load them with `indusagi -e` or `--extension`.
+
+# Loading Extensions
+
+Extensions are TypeScript modules that extend indusagi's capabilities. They can add custom tools, commands, UI components, and more.
+
+**Key Points:**
+- Load extensions with `-e` or `--extension` flag
+- Multiple extensions can be loaded at once
+- Extensions are auto-discovered from `.indusagi/` directory
+- Extensions can be local files, npm packages, or git repositories
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Loading Methods](#loading-methods)
+  - [CLI Flag (-e)](#cli-flag--e)
+  - [Auto-Discovery](#auto-discovery)
+  - [Configuration File](#configuration-file)
+- [Extension Resolution](#extension-resolution)
+- [Loading Multiple Extensions](#loading-multiple-extensions)
+- [Troubleshooting](#troubleshooting)
+
+## Quick Start
+
+The simplest way to load an extension is with the `-e` flag:
+
+```bash
+indusagi -e @indusagi/bg-process
+indusagi -e ./path/to/extension/index.ts
+indusagi -e my-custom-extension
+```
+
+## Loading Methods
+
+### CLI Flag (-e)
+
+Use the `-e` or `--extension` flag to load extensions:
+
+```bash
+# Load a single extension
+indusagi -e @indusagi/bg-process
+
+# Load multiple extensions
+indusagi -e @indusagi/bg-process -e ./custom-extension.ts
+
+# Mix different sources
+indusagi -e npm:my-pkg -e file:/path/to/ext -e @scope/package
+```
+
+**Supported formats:**
+- Package name (installed via npm): `@indusagi/bg-process`, `my-extension`
+- File path (local TS file): `./src/my-extension.ts`, `/absolute/path/extension.ts`
+- npm scope: `npm:@scope/package`
+- Git URL: `git:github.com/user/repo`
+
+### Auto-Discovery
+
+Extensions are automatically discovered from these locations:
+
+```
+~/.indusagi/agent/extensions/    # User global extensions
+.indusagi/extensions/             # Project extensions
+node_modules/@indusagi/*/         # Installed npm packages with "indusagi" field
+```
+
+Any TypeScript file in these directories with default export will be loaded.
+
+### Configuration File
+
+Enable/disable extensions via `.indusagi/config.json`:
+
+```json
+{
+  "extensions": {
+    "disabled": ["my-extension", "@scope/other-ext"]
+  }
+}
+```
+
+Or use interactive config:
+
+```bash
+indusagi config
+```
+
+## Extension Resolution
+
+When you load an extension, indusagi resolves it in this order:
+
+1. **Local file path** - If path exists, load directly
+2. **npm package** - Check `node_modules/` for package
+3. **Scoped package** - Check `node_modules/@scope/package`
+4. **Global extensions** - Check `~/.indusagi/agent/extensions/`
+5. **Project extensions** - Check `.indusagi/extensions/`
+
+The `-e` flag takes precedence over auto-discovery.
+
+## Loading Multiple Extensions
+
+Load multiple extensions to combine functionality:
+
+```bash
+indusagi \
+  -e @indusagi/bg-process \
+  -e ./extensions/git-helper.ts \
+  -e custom-auth-extension
+```
+
+**Order matters:** Extensions are loaded in the order specified. Earlier extensions can set up state that later extensions depend on.
+
+### Example: Combining Extensions
+
+```bash
+# Load security (permissions), monitoring (processes), and dev tools (git)
+indusagi -e security-ext -e @indusagi/bg-process -e git-ext
+```
+
+## Troubleshooting
+
+### Extension not found
+
+```
+Error: Cannot resolve extension "my-ext"
+```
+
+**Solutions:**
+- Check package is installed: `npm ls my-ext`
+- For local files, use relative path: `-e ./path/to/file.ts`
+- Check `.indusagi/config.json` is not disabling it
+
+### Module resolution errors
+
+```
+Error: Cannot find module "@indusagi/bg-process"
+```
+
+**Solutions:**
+- Install the package: `npm install @indusagi/bg-process`
+- Use full path if in local directory: `-e /full/path/index.ts`
+
+### TypeScript compilation errors
+
+Extension must have valid TypeScript syntax.
+
+**Solutions:**
+- Check imports are correct
+- Ensure TypeScript version matches
+- Run `tsc --noEmit` locally to check
+
+### Extension hooks not firing
+
+Extension loaded but doesn't seem to work.
+
+**Solutions:**
+- Check extension implements the hooks correctly
+- Enable debug logging: `DEBUG=indusagi:* indusagi`
+- Verify event names match: `session_start`, `tool_call`, etc.
+
+## Common Extension Patterns
+
+### Custom Tool Extension
+
+```bash
+indusagi -e ./my-tool-extension.ts
+```
+
+Extension registers a new tool callable by the LLM.
+
+### Permission Gate Extension
+
+```bash
+indusagi -e ./security-extension.ts
+```
+
+Extension intercepts tool calls and asks for confirmation.
+
+### Monitoring Extension
+
+```bash
+indusagi -e @indusagi/bg-process
+```
+
+Extension monitors background processes with real-time updates.
+
+### Custom Command Extension
+
+```bash
+indusagi -e ./commands-extension.ts
+```
+
+Extension adds new commands like `/mycommand`.
+
+## See Also
+
+- [Extensions Guide](./extensions.txt) - Create your own extensions
+- [CLI Reference](./cli-reference.txt) - Full CLI options
+- [@indusagi/bg-process](../package/agent/bg-process.txt) - Process management extension

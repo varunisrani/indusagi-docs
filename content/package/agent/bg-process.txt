@@ -1,0 +1,351 @@
+> Manage background processes without blocking your workflow. Start dev servers, builds, and tests in the background while continuing to code.
+
+# @indusagi/bg-process
+
+The `@indusagi/bg-process` extension provides complete background process management for indusagi. Run long-running commands, monitor their output, get alerts on completion, and manage them all from your AI agent.
+
+**Key Features:**
+- 🚀 Start processes in background without blocking
+- 📊 List and monitor all running processes
+- 📝 Stream or fetch process output on demand
+- 🎯 Smart alerts (on success, failure, crash, kill)
+- 🧹 Auto-cleanup when session ends
+- 📂 File-based logging (no memory overhead)
+- 🎮 Interactive CLI with full keyboard control
+
+## Installation
+
+### Via Package Manager
+
+```bash
+npm install @indusagi/bg-process
+```
+
+### Via CLI
+
+```bash
+indusagi install npm:@indusagi/bg-process
+```
+
+### Development
+
+```bash
+git clone <repo>
+cd indusagi-bg-tool
+npm install
+indusagi -e ./src/index.ts
+```
+
+## Quick Start
+
+Load the extension:
+
+```bash
+indusagi -e @indusagi/bg-process
+```
+
+Or with the full path:
+
+```bash
+indusagi -e node_modules/@indusagi/bg-process/src/index.ts
+```
+
+Start using the `process` tool in your agent:
+
+```
+Start a background dev server named "backend" running "npm run dev"
+```
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Tool: process](#tool-process)
+  - [Actions](#actions)
+  - [Examples](#examples)
+  - [Alert Parameters](#alert-parameters)
+- [Commands](#commands)
+  - [/process:list](#processlist)
+  - [/process:stream](#processstream)
+  - [/process:logs](#processlogs)
+  - [/process:kill](#processkill)
+  - [/process:clear](#processclear)
+- [Usage Patterns](#usage-patterns)
+- [Process Lifecycle](#process-lifecycle)
+- [Output Storage](#output-storage)
+- [Performance](#performance)
+- [Platform Support](#platform-support)
+
+## Tool: process
+
+The agent can use the `process` tool directly with these actions:
+
+### Actions
+
+#### start
+
+Start a command in background:
+
+```
+process action=start name="my-build" command="npm run build"
+process action=start name="dev-server" command="npm run dev" alertOnSuccess=true
+process action=start name="tests" command="npm test" alertOnFailure=true alertOnSuccess=true
+```
+
+**Parameters:**
+- `command` (required) - Command to execute
+- `name` (required) - Friendly process name (e.g., "backend-dev", "test-runner")
+- `alertOnSuccess` (optional, default: false) - Get agent turn when completes successfully
+- `alertOnFailure` (optional, default: true) - Get agent turn when fails/crashes
+- `alertOnKill` (optional, default: false) - Get agent turn when killed by signal
+
+#### list
+
+Show all managed processes:
+
+```
+process action=list
+```
+
+Shows:
+- Process ID (proc_1, proc_2, etc.)
+- Friendly name
+- Status (running, exited, killed, crashed)
+- PID
+- Command
+- Runtime duration
+
+#### output
+
+Get recent stdout/stderr from a process:
+
+```
+process action=output id="backend"
+process action=output id="proc_1"
+```
+
+Returns the last N lines of output.
+
+#### logs
+
+Get log file paths for inspection:
+
+```
+process action=logs id="my-build"
+```
+
+Returns paths to stdout and stderr log files. Use with the `read` tool to inspect.
+
+#### kill
+
+Terminate a process:
+
+```
+process action=kill id="backend"
+process action=kill id="proc_1"
+```
+
+Gracefully kills the process (SIGTERM → SIGKILL if needed).
+
+#### clear
+
+Remove all finished processes:
+
+```
+process action=clear
+```
+
+Removes exited/killed processes from the list.
+
+### Examples
+
+#### Development Workflow
+
+```
+1. Start dev server:
+   process action=start name="dev-server" command="npm run dev" alertOnFailure=true
+
+2. Run tests in parallel:
+   process action=start name="tests" command="npm test" alertOnSuccess=true
+
+3. Build in background:
+   process action=start name="build" command="npm run build" alertOnSuccess=true
+
+4. Check status:
+   process action=list
+
+5. Get build output:
+   process action=output id="build"
+
+6. Stream test logs:
+   /process:stream tests
+
+7. Kill dev server:
+   process action=kill id="dev-server"
+```
+
+#### CI/CD Automation
+
+```
+process action=start name="lint" command="npm run lint" alertOnFailure=true
+process action=start name="type-check" command="npm run type-check" alertOnFailure=true
+process action=start name="test" command="npm test" alertOnSuccess=true alertOnFailure=true
+process action=list
+```
+
+### Alert Parameters
+
+Control when the agent gets a turn to react:
+
+| Parameter | Default | When Triggered |
+|-----------|---------|-----------------|
+| `alertOnSuccess` | false | Process exits with code 0 |
+| `alertOnFailure` | true | Process exits with non-zero code or crashes |
+| `alertOnKill` | false | Process killed by external signal |
+
+**Why use alerts?**
+- Success alerts: Confirm build completed, review results
+- Failure alerts: Immediately fix broken tests
+- Kill alerts: React to unexpected terminations
+
+**Important:** User always sees process updates in UI. Alerts control whether the agent gets a turn to react (e.g., check results, fix code, restart).
+
+## Commands
+
+Interactive commands for manual process management:
+
+### /process:list
+
+Open the interactive process management panel:
+
+```
+/process:list
+```
+
+**Keyboard shortcuts:**
+- `j/k` - Move selection up/down
+- `J/K` - Scroll logs up/down
+- `enter` - Stream logs for selected process
+- `x` - Kill selected process
+- `c` - Clear finished processes
+- `q` - Quit and return to chat
+
+### /process:stream
+
+Stream logs from a running process:
+
+```
+/process:stream backend
+/process:stream proc_1
+```
+
+Continuously displays stdout/stderr.
+
+### /process:logs
+
+Show log file paths:
+
+```
+/process:logs my-build
+```
+
+Shows file paths for stdout and stderr logs.
+
+### /process:kill
+
+Kill a process:
+
+```
+/process:kill backend
+```
+
+Equivalent to `process action=kill id="backend"`.
+
+### /process:clear
+
+Clear finished processes:
+
+```
+/process:clear
+```
+
+Removes exited/killed processes from the list.
+
+## Usage Patterns
+
+### Long-Running Dev Server
+
+```
+process action=start name="dev" command="npm run dev" alertOnFailure=true
+```
+
+Runs your dev server and alerts if it crashes.
+
+### Parallel Build & Test
+
+```
+process action=start name="build" command="npm run build" alertOnSuccess=true
+process action=start name="test" command="npm test" alertOnSuccess=true
+```
+
+Both run simultaneously. Agent gets updates when each completes.
+
+### Watch Mode for Changes
+
+```
+process action=start name="watch" command="npm run watch"
+```
+
+Runs in background while you continue coding.
+
+### Log Inspection
+
+```
+process action=logs id="build"
+# Then in agent:
+read /tmp/pi-processes-.../proc_1_stdout.log
+```
+
+Read full logs using the `read` tool.
+
+## Process Lifecycle
+
+1. **Start** - Process created and starts running
+2. **Running** - Process is active and executing
+3. **Exited** - Process completed with exit code 0
+4. **Failed** - Process exited with non-zero code
+5. **Killed** - Process terminated by signal
+6. **Crashed** - Process crashed unexpectedly
+
+## Output Storage
+
+Process output is stored in temp directory:
+
+```
+$TMPDIR/pi-processes-{timestamp}/
+├── proc_1_stdout.log
+├── proc_1_stderr.log
+├── proc_2_stdout.log
+├── proc_2_stderr.log
+└── ...
+```
+
+**Auto-cleanup:** Logs are automatically deleted when the session ends.
+
+## Performance
+
+- **Minimal memory** - Output stored in files, not memory
+- **Efficient monitoring** - Process checks every 5 seconds
+- **Non-blocking** - Processes run independently
+- **Scalable** - Support for many concurrent processes
+
+## Platform Support
+
+- ✅ macOS 10.15+
+- ✅ Linux (glibc 2.17+)
+- ❌ Windows (not supported)
+
+## See Also
+
+- [Loading Extensions](../cli/loading-extensions.txt) - How to load extensions
+- [Extensions Guide](../cli/extensions.txt) - Create your own extensions
+- [Tools Reference](./tools-reference.txt) - All available tools
