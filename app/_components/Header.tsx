@@ -141,6 +141,28 @@ export function Header() {
                 </svg>
                 npm
               </a>
+              <a
+                href="https://github.com/varunisrani/indusagi.git"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-[color:var(--border)] text-[color:var(--muted)] px-3 py-1.5 text-sm font-medium hover:text-[color:var(--accent)] hover:border-[color:var(--accent)] transition-colors ml-2"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0.5C5.65 0.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.24.78-.54 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.38-3.88-1.38-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.71 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.73.81 1.18 1.84 1.18 3.1 0 4.44-2.69 5.41-5.25 5.69.41.35.77 1.05.77 2.12 0 1.53-.02 2.76-.02 3.14 0 .3.2.65.79.54A11.52 11.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+                </svg>
+                Indusagi SDK
+              </a>
+              <a
+                href="https://github.com/varunisrani/indusagi-coding-agent.git"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-[color:var(--border)] text-[color:var(--muted)] px-3 py-1.5 text-sm font-medium hover:text-[color:var(--accent-2)] hover:border-[color:var(--accent-2)] transition-colors ml-2"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0.5C5.65 0.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.24.78-.54 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.38-3.88-1.38-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.71 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.73.81 1.18 1.84 1.18 3.1 0 4.44-2.69 5.41-5.25 5.69.41.35.77 1.05.77 2.12 0 1.53-.02 2.76-.02 3.14 0 .3.2.65.79.54A11.52 11.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+                </svg>
+                Indusagi CLI
+              </a>
             </nav>
 
             {/* Mobile Menu Button */}
@@ -322,6 +344,40 @@ export function Header() {
                   <path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0H1.763zM4.24 4.5h15.52v15.52H4.24V4.5zm3.12 3.12v9.28h3.12v-6.16h3.04v6.16h3.12V7.62H7.36z" />
                 </svg>
                 indusagi-coding-agent (CLI)
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto text-[color:var(--muted)]">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </a>
+
+              <a
+                href="https://github.com/varunisrani/indusagi.git"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[color:var(--accent)]">
+                  <path d="M12 0.5C5.65 0.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.24.78-.54 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.38-3.88-1.38-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.71 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.73.81 1.18 1.84 1.18 3.1 0 4.44-2.69 5.41-5.25 5.69.41.35.77 1.05.77 2.12 0 1.53-.02 2.76-.02 3.14 0 .3.2.65.79.54A11.52 11.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+                </svg>
+                Indusagi SDK
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto text-[color:var(--muted)]">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </a>
+
+              <a
+                href="https://github.com/varunisrani/indusagi-coding-agent.git"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.05)] transition-colors"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[color:var(--accent-2)]">
+                  <path d="M12 0.5C5.65 0.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.24.78-.54 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.38-3.88-1.38-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.71 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.73.81 1.18 1.84 1.18 3.1 0 4.44-2.69 5.41-5.25 5.69.41.35.77 1.05.77 2.12 0 1.53-.02 2.76-.02 3.14 0 .3.2.65.79.54A11.52 11.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
+                </svg>
+                Indusagi CLI
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ml-auto text-[color:var(--muted)]">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <polyline points="15 3 21 3 21 9" />
