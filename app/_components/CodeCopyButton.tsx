@@ -15,18 +15,19 @@ export function CodeCopyButton() {
           try {
             await navigator.clipboard.writeText(codeData);
             
-            // Change button text
-            const original = button.textContent;
-            button.textContent = "✓ Copied";
-            button.style.background = "rgba(34, 197, 94, 0.2)";
+            // Show checkmark
+            button.textContent = "✓";
+            button.style.background = "rgba(34, 197, 94, 0.3)";
             button.style.color = "#22c55e";
+            button.style.borderColor = "rgba(34, 197, 94, 0.5)";
             
-            // Reset after 2 seconds
+            // Reset after 1.5 seconds
             setTimeout(() => {
-              button.textContent = original;
+              button.textContent = "copy";
               button.style.background = "";
               button.style.color = "";
-            }, 2000);
+              button.style.borderColor = "";
+            }, 1500);
           } catch (err) {
             console.error("Failed to copy:", err);
           }
