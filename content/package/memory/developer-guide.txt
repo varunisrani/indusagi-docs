@@ -1,0 +1,606 @@
+# Memory System - Developer Guide
+
+## Overview
+
+The Memory module in indusagi provides intelligent context management with semantic understanding, persistent storage, and multiple memory processors.
+
+## Architecture
+
+```
+indusagi/memory
+├── Memory              (Orchestrator)
+├── Processors
+│   ├── WorkingMemory   (Short-term context)
+│   ├── SemanticRecall  (Semantic search)
+│   ├── MessageHistory  (Conversation history)
+│   └── ObservationalMemory (Advanced observations)
+├── Storage
+│   ├── MemoryStorage   (Base interface)
+│   └── InMemoryStorage (Default implementation)
+├── Vector Stores
+│   ├── VectorStore     (Base interface)
+│   └── InMemoryVectorStore (Default implementation)
+├── Embedders
+│   ├── Embedder        (Base interface)
+│   └── OpenAIEmbedder  (OpenAI implementation)
+└── Types               (Protocol definitions)
+```
+
+## Core Components
+
+### 1. Memory Class - Main Orchestrator
+
+Central class that manages all memory processors and storage.
+
+**Import:**
+```typescript
+import { Memory, type MemoryConfig } from "indusagi/memory";
+```
+
+**Creating Memory:**
+```typescript
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "resource", // "global" or "resource"
+    },
+    semanticRecall: {
+      enabled: true,
+      topK: 5,
+      threshold: 0.7,
+    },
+    lastMessages: 10,
+  },
+});
+```
+
+**With embeddings:**
+```typescript
+import { InMemoryVectorStore } from "indusagi/memory";
+import { OpenAIEmbedder, createOpenAIEmbedder } from "indusagi/memory";
+
+const vectorStore = new InMemoryVectorStore();
+const embedder = createOpenAIEmbedder({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "text-embedding-3-small",
+});
+
+const memory = new Memory({
+  vector: vectorStore,
+  embedder: embedder,
+  options: {
+    semanticRecall: {
+      enabled: true,
+      topK: 5,
+      threshold: 0.7,
+    },
+  },
+});
+```
+
+### 2. Storage - Persist Data
+
+Store messages and threads persistently.
+
+**Import:**
+```typescript
+import { InMemoryStorage, type MemoryStorage } from "indusagi/memory";
+```
+
+**Creating storage:**
+```typescript
+// In-memory storage (default, no persistence)
+const storage = new InMemoryStorage();
+
+// Store a message
+await storage.createMessage({
+  threadId: "thread-123",
+  content: "Hello, world!",
+  role: "user",
+  timestamp: new Date(),
+});
+
+// List messages
+const messages = await storage.listMessages({
+  threadId: "thread-123",
+  limit: 10,
+});
+```
+
+**Storage operations:**
+```typescript
+// Create thread
+await storage.createThread({
+  id: "thread-123",
+  metadata: { projectId: "proj-1" },
+});
+
+// Update message
+await storage.updateMessage("message-123", {
+  content: "Updated content",
+});
+
+// Delete message
+await storage.deleteMessage("message-123");
+
+// Get messages with pagination
+const result = await storage.listMessages({
+  threadId: "thread-123",
+  limit: 20,
+  offset: 0,
+  orderBy: [{ field: "timestamp", direction: "desc" }],
+});
+```
+
+### 3. Vector Store - Semantic Search
+
+Enable semantic search through embeddings.
+
+**Import:**
+```typescript
+import { InMemoryVectorStore, type VectorStore } from "indusagi/memory";
+```
+
+**Creating vector store:**
+```typescript
+const vectorStore = new InMemoryVectorStore();
+
+// Create index
+await vectorStore.createIndex({
+  name: "memories",
+  dimension: 1536, // OpenAI embedding dimension
+});
+
+// Upsert vectors
+await vectorStore.upsertVectors({
+  indexName: "memories",
+  vectors: [
+    {
+      id: "msg-1",
+      vector: [...], // 1536 dimensions
+      metadata: { threadId: "thread-1" },
+    },
+  ],
+});
+
+// Query vectors (semantic search)
+const results = await vectorStore.queryVectors({
+  indexName: "memories",
+  vector: [...], // Query embedding
+  limit: 5,
+  threshold: 0.7,
+});
+```
+
+### 4. Embedder - Convert Text to Vectors
+
+**Import:**
+```typescript
+import { OpenAIEmbedder, createOpenAIEmbedder, type Embedder } from "indusagi/memory";
+```
+
+**Creating embedder:**
+```typescript
+const embedder = createOpenAIEmbedder({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "text-embedding-3-small", // or "text-embedding-3-large"
+});
+
+// Embed text
+const embedding = await embedder.embed("Hello, world!");
+console.log(embedding); // [0.123, -0.456, ..., 0.789]
+
+// Embed multiple texts
+const embeddings = await embedder.embedBatch([
+  "First text",
+  "Second text",
+  "Third text",
+]);
+```
+
+### 5. Processors - Memory Processors
+
+#### WorkingMemory - Short-term Context
+
+**Import:**
+```typescript
+import { WorkingMemory, type WorkingMemoryProcessorConfig } from "indusagi/memory";
+```
+
+**Creating working memory:**
+```typescript
+const workingMemory = new WorkingMemory({
+  storage,
+  scope: "resource", // scoped to a resource
+});
+
+// Process (update working memory)
+const result = await workingMemory.process({
+  role: "assistant",
+  content: "Let me update the context with important details",
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
+```
+
+**Update working memory tool:**
+```typescript
+import { createUpdateWorkingMemoryTool } from "indusagi/memory";
+
+const tool = createUpdateWorkingMemoryTool(memory);
+
+// Use in agent
+registry.register(tool);
+```
+
+#### SemanticRecall - Semantic Search
+
+**Import:**
+```typescript
+import { SemanticRecall, type SemanticRecallProcessorConfig } from "indusagi/memory";
+```
+
+**Creating semantic recall:**
+```typescript
+const semanticRecall = new SemanticRecall({
+  storage,
+  vector: vectorStore,
+  embedder,
+  indexName: "memories",
+  topK: 5,
+  threshold: 0.7,
+  scope: "resource",
+});
+
+// Process (search and retrieve)
+const result = await semanticRecall.process({
+  role: "user",
+  content: "Help me with the project I was working on",
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
+
+console.log(result.relevantMessages); // Semantically similar past messages
+```
+
+#### MessageHistory - Conversation History
+
+**Import:**
+```typescript
+import { MessageHistory, type MessageHistoryProcessorConfig } from "indusagi/memory";
+```
+
+**Creating message history:**
+```typescript
+const messageHistory = new MessageHistory({
+  storage,
+  limit: 10, // Keep last 10 messages
+});
+
+// Process (get message history)
+const result = await messageHistory.process({
+  threadId: "thread-1",
+});
+
+console.log(result.messages); // Last 10 messages
+```
+
+#### ObservationalMemory - Advanced Observations
+
+**Import:**
+```typescript
+import {
+  ObservationalMemory,
+  type ObservationalMemoryProcessorConfig,
+} from "indusagi/memory";
+```
+
+**Creating observational memory:**
+```typescript
+const observationalMemory = new ObservationalMemory({
+  storage,
+  vector: vectorStore,
+  embedder,
+  config: {
+    enabled: true,
+    extractionModel: "gpt-4",
+    compressionModel: "gpt-4",
+  },
+});
+
+// Process (extract observations)
+const result = await observationalMemory.process({
+  threadId: "thread-1",
+  role: "assistant",
+  content: "The user prefers TypeScript for projects",
+});
+
+console.log(result.extractedObservations);
+```
+
+## Complete Example
+
+```typescript
+import { Memory, InMemoryStorage, InMemoryVectorStore, createOpenAIEmbedder } from "indusagi/memory";
+
+// Setup
+const storage = new InMemoryStorage();
+const vectorStore = new InMemoryVectorStore();
+const embedder = createOpenAIEmbedder({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Create memory system
+const memory = new Memory({
+  storage,
+  vector: vectorStore,
+  embedder,
+  options: {
+    workingMemory: { enabled: true, scope: "resource" },
+    semanticRecall: { enabled: true, topK: 5, threshold: 0.7 },
+    lastMessages: 10,
+  },
+});
+
+// Create thread
+await storage.createThread({ id: "user-123" });
+
+// Add a message
+await memory.addMessage({
+  threadId: "user-123",
+  role: "user",
+  content: "I prefer TypeScript and functional programming",
+  type: "text",
+});
+
+// Retrieve context for a new message
+const context = await memory.getContext({
+  threadId: "user-123",
+});
+
+console.log("Working Memory:", context.workingMemory);
+console.log("Relevant History:", context.messageHistory);
+console.log("Semantic Matches:", context.semanticMatches);
+```
+
+## API Reference
+
+### Memory
+
+```typescript
+class Memory {
+  constructor(options: SharedMemoryConfig);
+  
+  // Message operations
+  addMessage(input: AddMessageInput): Promise<void>;
+  getMessages(input: GetMessagesInput): Promise<CoreMessage[]>;
+  
+  // Thread operations
+  createThread(id: string, metadata?: Record<string, any>): Promise<void>;
+  getThreads(): Promise<StorageThreadType[]>;
+  
+  // Context retrieval
+  getContext(input: GetContextInput): Promise<MemoryContext>;
+  
+  // Working memory
+  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
+  getWorkingMemory(threadId: string): Promise<WorkingMemoryTemplate>;
+  
+  // Semantic search
+  searchSemantic(query: string, limit?: number): Promise<SearchResult[]>;
+}
+```
+
+### Storage
+
+```typescript
+interface MemoryStorage {
+  createMessage(input: CreateMessageInput): Promise<void>;
+  updateMessage(id: string, input: UpdateMessageInput): Promise<void>;
+  deleteMessage(id: string): Promise<void>;
+  
+  listMessages(input: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+  
+  createThread(input: CreateThreadInput): Promise<void>;
+  listThreads(input: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
+  
+  // Working memory
+  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
+  getWorkingMemory(id: string): Promise<WorkingMemoryTemplate | null>;
+  
+  // Observations
+  createObservations(input: CreateObservationsInput): Promise<void>;
+  listObservations(threadId: string): Promise<ObservationalMemoryRecord[]>;
+}
+```
+
+### VectorStore
+
+```typescript
+interface VectorStore {
+  createIndex(params: CreateIndexParams): Promise<void>;
+  
+  upsertVectors(params: UpsertVectorParams): Promise<void>;
+  updateVector(params: UpdateVectorParams): Promise<void>;
+  deleteVector(params: DeleteVectorParams): Promise<void>;
+  
+  queryVectors(params: QueryVectorParams): Promise<VectorQueryResult[]>;
+  
+  getStats(indexName: string): Promise<IndexStats>;
+}
+```
+
+### Embedder
+
+```typescript
+interface Embedder {
+  embed(text: string): Promise<number[]>;
+  embedBatch(texts: string[]): Promise<number[][]>;
+  getDimension(): number;
+}
+```
+
+## Configuration Options
+
+```typescript
+interface MemoryConfig {
+  // Working memory settings
+  workingMemory?: {
+    enabled?: boolean;
+    scope?: "global" | "resource";
+    maxSize?: number;
+  };
+  
+  // Semantic recall settings
+  semanticRecall?: {
+    enabled?: boolean;
+    topK?: number;
+    threshold?: number;
+    messageRange?: number;
+    scope?: "global" | "resource";
+  };
+  
+  // Message history settings
+  lastMessages?: number; // Keep last N messages
+  
+  // Observational memory settings
+  observational?: {
+    enabled?: boolean;
+    extractionModel?: string;
+    compressionModel?: string;
+  };
+}
+```
+
+## Advanced Usage
+
+### Custom Storage Implementation
+
+```typescript
+import { MemoryStorage } from "indusagi/memory";
+
+class CustomStorage implements MemoryStorage {
+  async createMessage(input) {
+    // Your custom implementation
+  }
+  
+  async listMessages(input) {
+    // Your custom implementation
+  }
+  
+  // ... implement other methods
+}
+
+const memory = new Memory({
+  storage: new CustomStorage(),
+});
+```
+
+### Custom Embedder
+
+```typescript
+import { Embedder } from "indusagi/memory";
+
+class CustomEmbedder implements Embedder {
+  async embed(text: string) {
+    // Call your embedding service
+    return [...]; // 1536 dimensions
+  }
+  
+  async embedBatch(texts: string[]) {
+    return texts.map(t => this.embed(t));
+  }
+  
+  getDimension() {
+    return 1536;
+  }
+}
+```
+
+## Performance Optimization
+
+### Caching Embeddings
+
+```typescript
+class CachedEmbedder {
+  private cache = new Map<string, number[]>();
+  
+  async embed(text: string) {
+    if (this.cache.has(text)) {
+      return this.cache.get(text)!;
+    }
+    
+    const embedding = await this.baseEmbedder.embed(text);
+    this.cache.set(text, embedding);
+    return embedding;
+  }
+}
+```
+
+### Batch Processing
+
+```typescript
+// Process multiple messages efficiently
+const messages = [...];
+const embeddings = await embedder.embedBatch(
+  messages.map(m => m.content)
+);
+
+// Upsert all at once
+await vectorStore.upsertVectors({
+  indexName: "memories",
+  vectors: messages.map((m, i) => ({
+    id: m.id,
+    vector: embeddings[i],
+    metadata: { threadId: m.threadId },
+  })),
+});
+```
+
+## Troubleshooting
+
+### Memory Not Persisting
+
+Ensure you're using a persistent storage backend:
+
+```typescript
+// DON'T: This doesn't persist
+const memory = new Memory();
+
+// DO: Use persistent storage
+const storage = new CustomPersistentStorage();
+const memory = new Memory({ storage });
+```
+
+### Slow Semantic Search
+
+```typescript
+// Check vector store stats
+const stats = await vectorStore.getStats("memories");
+console.log(`Total vectors: ${stats.vectorCount}`);
+
+// Consider increasing threshold to filter results
+const results = await semanticRecall.process({
+  // ... with threshold: 0.8 (more selective)
+});
+```
+
+### Embeddings Not Matching
+
+Verify you're using consistent embedder:
+
+```typescript
+// Make sure same embedder for indexing and querying
+const embedder = createOpenAIEmbedder({ ... });
+
+// Use same embedder everywhere
+const memory = new Memory({ embedder });
+const semanticRecall = new SemanticRecall({ embedder });
+```
+
+---
+
+**Version**: 0.12.15  
+**Last Updated**: March 2026  
+**Status**: ✅ Production Ready

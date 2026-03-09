@@ -1,0 +1,285 @@
+# MCP Module - API Reference
+
+## Exports from `indusagi/mcp`
+
+### Classes
+
+#### MCPClient
+```typescript
+class MCPClient {
+  constructor(options: MCPClientOptions);
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  listTools(): Promise<MCPToolDefinition[]>;
+  callTool(name: string, params: any): Promise<any>;
+  listResources(): Promise<MCPResource[]>;
+  readResource(uri: string): Promise<string>;
+  listPrompts(): Promise<MCPPrompt[]>;
+  getPrompt(name: string, params?: Record<string, string>): Promise<string>;
+  get serverName(): string;
+  get isConnected(): boolean;
+}
+```
+
+#### MCPClientPool
+```typescript
+class MCPClientPool {
+  constructor(options: MCPClientPoolOptions);
+  connectAll(): Promise<void>;
+  disconnectAll(): Promise<void>;
+  addServer(config: MCPConnectionOptions): Promise<void>;
+  removeServer(name: string): Promise<void>;
+  getAllClients(): MCPClient[];
+  getClient(name: string): MCPClient | undefined;
+  getStatus(): MCPServerStatus[];
+}
+```
+
+#### MCPServer
+```typescript
+class MCPServer {
+  constructor(options: MCPServerOptions);
+  addTool(tool: ToolDefinition): void;
+  addResource(resource: ResourceDefinition): void;
+  addPrompt(prompt: PromptDefinition): void;
+  startStdio(): Promise<void>;
+  close(): Promise<void>;
+}
+```
+
+### Functions
+
+#### initializeMCP
+```typescript
+async function initializeMCP(
+  registry: ToolRegistry,
+  cwd: string
+): Promise<{ pool: MCPClientPool; toolCount: number }>;
+```
+
+#### registerMCPToolsInRegistry
+```typescript
+async function registerMCPToolsInRegistry(
+  registry: ToolRegistry,
+  client: MCPClient,
+  tools: MCPToolDefinition[]
+): Promise<number>;
+```
+
+#### createMCPToolsMap
+```typescript
+function createMCPToolsMap(
+  client: MCPClient,
+  tools: MCPToolDefinition[]
+): Record<string, AgentTool>;
+```
+
+#### createMCPAgentToolFactory
+```typescript
+function createMCPAgentToolFactory(
+  tool: MCPToolDefinition,
+  client: MCPClient
+): () => AgentTool;
+```
+
+#### loadMCPConfig
+```typescript
+function loadMCPConfig(cwd?: string): MCPConnectionOptions[];
+```
+
+#### saveConfig
+```typescript
+async function saveConfig(
+  config: MCPServerConfigEntry,
+  options?: { scope: "user" | "project" }
+): Promise<void>;
+```
+
+#### getUserConfigPath
+```typescript
+function getUserConfigPath(): string;
+```
+
+#### getProjectConfigPath
+```typescript
+function getProjectConfigPath(): string;
+```
+
+#### jsonSchemaToTypeBox
+```typescript
+function jsonSchemaToTypeBox(schema: any): any;
+```
+
+### Error Classes
+
+#### MCPError
+```typescript
+class MCPError extends Error {
+  code: MCPErrorCode;
+  constructor(message: string, code: MCPErrorCode);
+}
+```
+
+#### Error Codes
+```typescript
+enum MCPErrorCode {
+  CONNECTION_FAILED = "CONNECTION_FAILED",
+  TIMEOUT = "TIMEOUT",
+  TOOL_NOT_FOUND = "TOOL_NOT_FOUND",
+  INVALID_PARAMETERS = "INVALID_PARAMETERS",
+  EXECUTION_ERROR = "EXECUTION_ERROR",
+  SERVER_ERROR = "SERVER_ERROR",
+  NOT_CONNECTED = "NOT_CONNECTED",
+  CONFIG_ERROR = "CONFIG_ERROR",
+  SCHEMA_CONVERSION_ERROR = "SCHEMA_CONVERSION_ERROR",
+}
+```
+
+### Type Definitions
+
+#### MCPClientOptions
+```typescript
+interface MCPClientOptions {
+  name: string;
+  config: MCPServerConfig;
+  timeout?: number;
+  logger?: (msg: MCPLogMessage) => void;
+  enableServerLogs?: boolean;
+}
+```
+
+#### MCPClientPoolOptions
+```typescript
+interface MCPClientPoolOptions {
+  servers: MCPConnectionOptions[];
+}
+```
+
+#### MCPConnectionOptions
+```typescript
+interface MCPConnectionOptions {
+  name: string;
+  config: MCPServerConfig;
+  env?: Record<string, string>;
+  timeout?: number;
+}
+```
+
+#### MCPServerConfig
+```typescript
+type MCPServerConfig = StdioServerConfig | HttpServerConfig;
+
+interface StdioServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+interface HttpServerConfig {
+  url: string;
+  headers?: Record<string, string>;
+}
+```
+
+#### MCPToolDefinition
+```typescript
+interface MCPToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, any>;
+}
+```
+
+#### MCPResource
+```typescript
+interface MCPResource {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+```
+
+#### MCPPrompt
+```typescript
+interface MCPPrompt {
+  name: string;
+  description?: string;
+  arguments?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+  }>;
+}
+```
+
+#### MCPServerStatus
+```typescript
+interface MCPServerStatus {
+  name: string;
+  connected: boolean;
+  toolCount?: number;
+  resourceCount?: number;
+  promptCount?: number;
+}
+```
+
+## Configuration File Format
+
+### ~/.indusagi/mcp.json (or .mcp.json)
+```json
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "config": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+      }
+    },
+    {
+      "name": "github",
+      "config": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"]
+      },
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  ]
+}
+```
+
+## Environment Variables
+
+- `MCP_CONFIG_PATH` - Custom config directory path
+- `INDUSAGI_DEBUG` - Enable debug logging (set to "1")
+- Provider-specific: `GITHUB_TOKEN`, `BRAVE_API_KEY`, etc.
+
+## Usage Patterns
+
+### Basic Connection
+```typescript
+const client = new MCPClient({
+  name: "filesystem",
+  config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "."] },
+});
+await client.connect();
+```
+
+### Pool Management
+```typescript
+const pool = new MCPClientPool({
+  servers: loadMCPConfig(process.cwd()),
+});
+await pool.connectAll();
+```
+
+### Tool Registration
+```typescript
+const registry = new ToolRegistry();
+const { pool, toolCount } = await initializeMCP(registry);
+```
+
+For complete examples and advanced usage, see `developer-guide.txt` and `integration.txt`.

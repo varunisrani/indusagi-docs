@@ -1,0 +1,346 @@
+# Memory Module - API Reference
+
+## Exports from `indusagi/memory`
+
+### Classes
+
+#### Memory
+```typescript
+class Memory {
+  constructor(options: SharedMemoryConfig);
+  
+  // Message operations
+  addMessage(input: AddMessageInput): Promise<void>;
+  getMessages(input: GetMessagesInput): Promise<CoreMessage[]>;
+  
+  // Thread operations
+  createThread(id: string, metadata?: Record<string, any>): Promise<void>;
+  getThreads(): Promise<StorageThreadType[]>;
+  
+  // Context retrieval
+  getContext(input: GetContextInput): Promise<MemoryContext>;
+  
+  // Working memory
+  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
+  getWorkingMemory(threadId: string): Promise<WorkingMemoryTemplate>;
+  
+  // Semantic search
+  searchSemantic(query: string, limit?: number): Promise<SearchResult[]>;
+}
+```
+
+#### InMemoryStorage
+```typescript
+class InMemoryStorage implements MemoryStorage {
+  createMessage(input: CreateMessageInput): Promise<void>;
+  updateMessage(id: string, input: UpdateMessageInput): Promise<void>;
+  deleteMessage(id: string): Promise<void>;
+  listMessages(input: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+  createThread(input: CreateThreadInput): Promise<void>;
+  listThreads(input: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
+  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
+  getWorkingMemory(id: string): Promise<WorkingMemoryTemplate | null>;
+}
+```
+
+#### InMemoryVectorStore
+```typescript
+class InMemoryVectorStore implements VectorStore {
+  createIndex(params: CreateIndexParams): Promise<void>;
+  upsertVectors(params: UpsertVectorParams): Promise<void>;
+  updateVector(params: UpdateVectorParams): Promise<void>;
+  deleteVector(params: DeleteVectorParams): Promise<void>;
+  queryVectors(params: QueryVectorParams): Promise<VectorQueryResult[]>;
+  getStats(indexName: string): Promise<IndexStats>;
+}
+```
+
+#### OpenAIEmbedder
+```typescript
+class OpenAIEmbedder implements Embedder {
+  constructor(config: OpenAIEmbedderConfig);
+  embed(text: string): Promise<number[]>;
+  embedBatch(texts: string[]): Promise<number[][]>;
+  getDimension(): number;
+}
+```
+
+#### WorkingMemory
+```typescript
+class WorkingMemory implements MemoryProcessor {
+  constructor(config: WorkingMemoryProcessorConfig);
+  process(context: ProcessorContext): Promise<WorkingMemoryResult>;
+}
+```
+
+#### SemanticRecall
+```typescript
+class SemanticRecall implements MemoryProcessor {
+  constructor(config: SemanticRecallProcessorConfig);
+  process(context: ProcessorContext): Promise<SemanticRecallResult>;
+}
+```
+
+#### MessageHistory
+```typescript
+class MessageHistory implements MemoryProcessor {
+  constructor(config: MessageHistoryProcessorConfig);
+  process(context: ProcessorContext): Promise<MessageHistoryResult>;
+}
+```
+
+#### ObservationalMemory
+```typescript
+class ObservationalMemory implements MemoryProcessor {
+  constructor(config: ObservationalMemoryProcessorConfig);
+  process(context: ProcessorContext): Promise<ObservationalMemoryResult>;
+}
+```
+
+### Functions
+
+#### createOpenAIEmbedder
+```typescript
+function createOpenAIEmbedder(
+  config: OpenAIEmbedderConfig
+): OpenAIEmbedder;
+```
+
+#### createUpdateWorkingMemoryTool
+```typescript
+function createUpdateWorkingMemoryTool(
+  memory: Memory
+): AgentTool;
+```
+
+### Type Definitions
+
+#### MemoryConfig
+```typescript
+interface MemoryConfig {
+  workingMemory?: {
+    enabled?: boolean;
+    scope?: "global" | "resource";
+    maxSize?: number;
+  };
+  semanticRecall?: {
+    enabled?: boolean;
+    topK?: number;
+    threshold?: number;
+    messageRange?: number;
+    scope?: "global" | "resource";
+  };
+  lastMessages?: number;
+  observational?: {
+    enabled?: boolean;
+    extractionModel?: string;
+    compressionModel?: string;
+  };
+}
+```
+
+#### SharedMemoryConfig
+```typescript
+interface SharedMemoryConfig {
+  storage?: MemoryStorage;
+  vector?: VectorStore;
+  embedder?: Embedder;
+  embedderOptions?: EmbedderOptions;
+  options?: MemoryConfig;
+}
+```
+
+#### CoreMessage
+```typescript
+interface CoreMessage {
+  id: string;
+  threadId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  type: "text" | "image" | "audio";
+  timestamp: Date;
+  metadata?: Record<string, any>;
+}
+```
+
+#### StorageThreadType
+```typescript
+interface StorageThreadType {
+  id: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+#### EmbedderOptions
+```typescript
+interface EmbedderOptions {
+  model: string;
+  apiKey?: string;
+  dimension?: number;
+}
+```
+
+#### VectorQueryResult
+```typescript
+interface VectorQueryResult {
+  id: string;
+  similarity: number;
+  metadata?: Record<string, any>;
+}
+```
+
+#### WorkingMemoryTemplate
+```typescript
+interface WorkingMemoryTemplate {
+  [key: string]: any;
+}
+```
+
+#### ProcessorContext
+```typescript
+interface ProcessorContext {
+  threadId: string;
+  role?: "user" | "assistant" | "system";
+  content?: string;
+  resourceId?: string;
+}
+```
+
+## Storage Interface
+
+```typescript
+interface MemoryStorage {
+  createMessage(input: CreateMessageInput): Promise<void>;
+  updateMessage(id: string, input: UpdateMessageInput): Promise<void>;
+  deleteMessage(id: string): Promise<void>;
+  listMessages(input: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+  
+  createThread(input: CreateThreadInput): Promise<void>;
+  listThreads(input: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
+  
+  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
+  getWorkingMemory(id: string): Promise<WorkingMemoryTemplate | null>;
+}
+```
+
+## Vector Store Interface
+
+```typescript
+interface VectorStore {
+  createIndex(params: CreateIndexParams): Promise<void>;
+  upsertVectors(params: UpsertVectorParams): Promise<void>;
+  updateVector(params: UpdateVectorParams): Promise<void>;
+  deleteVector(params: DeleteVectorParams): Promise<void>;
+  queryVectors(params: QueryVectorParams): Promise<VectorQueryResult[]>;
+  getStats(indexName: string): Promise<IndexStats>;
+}
+```
+
+## Embedder Interface
+
+```typescript
+interface Embedder {
+  embed(text: string): Promise<number[]>;
+  embedBatch(texts: string[]): Promise<number[][]>;
+  getDimension(): number;
+}
+```
+
+## Configuration Options
+
+### OpenAIEmbedderConfig
+```typescript
+interface OpenAIEmbedderConfig {
+  apiKey: string;
+  model?: "text-embedding-3-small" | "text-embedding-3-large";
+  dimension?: number;
+}
+```
+
+### WorkingMemoryProcessorConfig
+```typescript
+interface WorkingMemoryProcessorConfig {
+  storage: MemoryStorage;
+  scope?: "global" | "resource";
+  maxSize?: number;
+}
+```
+
+### SemanticRecallProcessorConfig
+```typescript
+interface SemanticRecallProcessorConfig {
+  storage: MemoryStorage;
+  vector: VectorStore;
+  embedder: Embedder;
+  embedderOptions?: EmbedderOptions;
+  indexName: string;
+  topK?: number;
+  messageRange?: number;
+  scope?: "global" | "resource";
+  threshold?: number;
+}
+```
+
+## Environment Variables
+
+- `OPENAI_API_KEY` - For OpenAI embeddings
+- `MEMORY_ENABLED` - Enable/disable memory (true/false)
+- `MEMORY_THRESHOLD` - Similarity threshold (0.0-1.0)
+- `MEMORY_STORAGE` - Storage backend (in-memory, sqlite, mongodb)
+
+## Usage Patterns
+
+### Basic Setup
+```typescript
+const memory = new Memory({
+  storage: new InMemoryStorage(),
+  options: {
+    lastMessages: 10,
+  },
+});
+```
+
+### With Semantic Search
+```typescript
+const memory = new Memory({
+  storage: new InMemoryStorage(),
+  vector: new InMemoryVectorStore(),
+  embedder: createOpenAIEmbedder({
+    apiKey: process.env.OPENAI_API_KEY,
+  }),
+  options: {
+    semanticRecall: { enabled: true, topK: 5 },
+  },
+});
+```
+
+### Add Message
+```typescript
+await memory.addMessage({
+  threadId: "user-123",
+  role: "user",
+  content: "Hello",
+  type: "text",
+});
+```
+
+### Get Context
+```typescript
+const context = await memory.getContext({
+  threadId: "user-123",
+});
+console.log(context.workingMemory);
+console.log(context.messageHistory);
+```
+
+### Semantic Search
+```typescript
+const results = await memory.searchSemantic(
+  "user preferences",
+  5
+);
+```
+
+For complete examples and advanced usage, see `developer-guide.txt`.

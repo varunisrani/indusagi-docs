@@ -1,0 +1,554 @@
+# MCP (Model Context Protocol) - Developer Guide
+
+## Overview
+
+The MCP module in indusagi provides Model Context Protocol support, enabling applications to connect with external tools, APIs, and services through a standardized interface.
+
+## Architecture
+
+```
+indusagi/mcp
+├── MCPClient          (Single server connection)
+├── MCPClientPool      (Multiple server management)
+├── MCPServer          (Create custom MCP servers)
+├── MCPToolFactory     (Convert MCP tools to AgentTools)
+├── Config             (Server configuration management)
+├── SchemaConverter    (JSON Schema ↔ TypeBox conversion)
+└── Types              (Protocol definitions)
+```
+
+## Core Components
+
+### 1. MCPClient - Single Server Connection
+
+Manages connection to a single MCP server.
+
+**Import:**
+```typescript
+import { MCPClient, type MCPClientOptions } from "indusagi/mcp";
+```
+
+**Creating a client:**
+```typescript
+const client = new MCPClient({
+  name: "filesystem",
+  config: {
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
+  },
+  timeout: 60000,
+  logger: (msg) => console.log(`[MCP] ${msg.level}: ${msg.message}`),
+  enableServerLogs: true,
+});
+
+await client.connect();
+```
+
+**Listing tools:**
+```typescript
+const tools = await client.listTools();
+console.log(`Available tools: ${tools.map(t => t.name).join(", ")}`);
+```
+
+**Executing a tool:**
+```typescript
+const result = await client.callTool("read_file", {
+  path: "./README.md",
+});
+console.log(result);
+```
+
+**Listing resources:**
+```typescript
+const resources = await client.listResources();
+```
+
+**Reading resources:**
+```typescript
+const content = await client.readResource("file:///path/to/file");
+```
+
+**Disconnecting:**
+```typescript
+await client.disconnect();
+```
+
+### 2. MCPClientPool - Multiple Server Management
+
+Orchestrates connections to multiple MCP servers.
+
+**Import:**
+```typescript
+import { MCPClientPool, type MCPClientPoolOptions } from "indusagi/mcp";
+```
+
+**Creating a pool:**
+```typescript
+const pool = new MCPClientPool({
+  servers: [
+    {
+      name: "filesystem",
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      },
+    },
+    {
+      name: "github",
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-github"],
+      },
+      env: {
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN || "",
+      },
+    },
+  ],
+});
+```
+
+**Connecting all servers:**
+```typescript
+await pool.connectAll();
+// Errors per-server are logged but don't fail the entire operation
+```
+
+**Getting all clients:**
+```typescript
+for (const client of pool.getAllClients()) {
+  console.log(`Connected to: ${client.serverName}`);
+}
+```
+
+**Getting server status:**
+```typescript
+const status = pool.getStatus();
+console.log(status);
+// [
+//   { name: "filesystem", connected: true, toolCount: 8 },
+//   { name: "github", connected: true, toolCount: 12 }
+// ]
+```
+
+**Adding a server dynamically:**
+```typescript
+await pool.addServer({
+  name: "postgres",
+  config: {
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-postgres"],
+  },
+  env: {
+    DATABASE_URL: "postgresql://...",
+  },
+});
+```
+
+**Disconnecting all servers:**
+```typescript
+await pool.disconnectAll();
+```
+
+### 3. MCPServer - Create Custom MCP Servers
+
+Build custom MCP servers to expose your own tools.
+
+**Import:**
+```typescript
+import { MCPServer, createMCPServer, type MCPServerOptions } from "indusagi/mcp";
+```
+
+**Creating a custom server:**
+```typescript
+const server = createMCPServer({
+  name: "my-calculator",
+  version: "1.0.0",
+});
+
+// Add tools
+server.addTool({
+  name: "add",
+  description: "Add two numbers",
+  inputSchema: {
+    type: "object",
+    properties: {
+      a: { type: "number" },
+      b: { type: "number" },
+    },
+    required: ["a", "b"],
+  },
+  handler: async ({ a, b }) => ({
+    result: a + b,
+  }),
+});
+
+// Start stdio transport
+await server.startStdio();
+```
+
+**Using with NodeJs child_process:**
+```typescript
+const { spawn } = require("child_process");
+
+const proc = spawn("node", ["my-calculator-server.js"]);
+
+// Server now accepts MCP protocol messages via stdio
+```
+
+### 4. MCPToolFactory - Convert Tools
+
+Convert MCP tools to agent tools.
+
+**Import:**
+```typescript
+import {
+  createMCPAgentToolFactory,
+  registerMCPToolsInRegistry,
+  createMCPToolsMap,
+} from "indusagi/mcp";
+```
+
+**Creating agent tools from MCP tools:**
+```typescript
+import { ToolRegistry } from "indusagi/agent";
+
+const registry = new ToolRegistry();
+const client = /* ... MCPClient instance ... */;
+
+// Get MCP tools
+const mcpTools = await client.listTools();
+
+// Register all tools
+const count = await registerMCPToolsInRegistry(registry, client, mcpTools);
+console.log(`Registered ${count} tools from ${client.serverName}`);
+```
+
+**Manual tool conversion:**
+```typescript
+const mcpTool = {
+  name: "read_file",
+  description: "Read file contents",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+    },
+    required: ["path"],
+  },
+};
+
+const factory = createMCPAgentToolFactory(mcpTool, client);
+const agentTool = factory();
+
+// Now you can use agentTool with agents
+```
+
+**Creating a map of tools:**
+```typescript
+const toolsMap = createMCPToolsMap(client, mcpTools);
+
+// {
+//   "filesystem/read_file": AgentTool,
+//   "filesystem/write_file": AgentTool,
+//   ...
+// }
+```
+
+### 5. Configuration Management
+
+**Import:**
+```typescript
+import {
+  loadMCPConfig,
+  saveConfig,
+  ensureUserConfigDir,
+  getUserConfigPath,
+  getProjectConfigPath,
+} from "indusagi/mcp";
+```
+
+**Loading configuration:**
+```typescript
+// Loads from:
+// 1. Project config: .mcp.json in current directory
+// 2. User config: ~/.mcp.json or ~/.config/mcp/config.json
+// 3. Environment: MCP_CONFIG_PATH env var
+const configs = loadMCPConfig(process.cwd());
+```
+
+**Saving configuration:**
+```typescript
+const config = {
+  name: "my-server",
+  config: {
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-example"],
+  },
+};
+
+// Save to user config
+await saveConfig(config, { scope: "user" });
+
+// Save to project config
+await saveConfig(config, { scope: "project" });
+```
+
+**Configuration file locations:**
+```typescript
+const userPath = getUserConfigPath();      // ~/.mcp.json
+const projectPath = getProjectConfigPath(); // .mcp.json
+```
+
+## Convenience Functions
+
+### Initialize MCP
+
+One-line initialization:
+
+```typescript
+import { initializeMCP } from "indusagi/mcp";
+import { ToolRegistry } from "indusagi/agent";
+
+const registry = new ToolRegistry();
+const { pool, toolCount } = await initializeMCP(registry, process.cwd());
+
+console.log(`Connected to ${pool.getAllClients().length} servers with ${toolCount} tools`);
+```
+
+## Schema Conversion
+
+Convert JSON Schema to TypeBox and vice versa:
+
+```typescript
+import {
+  jsonSchemaToTypeBox,
+  convertMCPInputSchema,
+  convertMCPOutputSchema,
+} from "indusagi/mcp";
+
+const jsonSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    age: { type: "number" },
+  },
+  required: ["name"],
+};
+
+const typeboxSchema = jsonSchemaToTypeBox(jsonSchema);
+```
+
+## Error Handling
+
+**Import error types:**
+```typescript
+import { MCPError, MCPErrorCode, isMCPError } from "indusagi/mcp";
+```
+
+**Handling errors:**
+```typescript
+try {
+  await client.callTool("nonexistent_tool", {});
+} catch (error) {
+  if (isMCPError(error)) {
+    if (error.code === MCPErrorCode.TOOL_NOT_FOUND) {
+      console.log("Tool not found");
+    } else if (error.code === MCPErrorCode.INVALID_PARAMETERS) {
+      console.log("Invalid parameters");
+    }
+  }
+}
+```
+
+**Available error codes:**
+```typescript
+enum MCPErrorCode {
+  CONNECTION_FAILED = "CONNECTION_FAILED",
+  TIMEOUT = "TIMEOUT",
+  TOOL_NOT_FOUND = "TOOL_NOT_FOUND",
+  INVALID_PARAMETERS = "INVALID_PARAMETERS",
+  EXECUTION_ERROR = "EXECUTION_ERROR",
+  SERVER_ERROR = "SERVER_ERROR",
+  NOT_CONNECTED = "NOT_CONNECTED",
+  CONFIG_ERROR = "CONFIG_ERROR",
+  SCHEMA_CONVERSION_ERROR = "SCHEMA_CONVERSION_ERROR",
+}
+```
+
+## Advanced Usage
+
+### Custom Tool Registration
+
+```typescript
+class CustomToolRegistry extends ToolRegistry {
+  async registerMCPTools(pool: MCPClientPool) {
+    for (const client of pool.getAllClients()) {
+      const tools = await client.listTools();
+      for (const tool of tools) {
+        // Custom registration logic
+        const factory = createMCPAgentToolFactory(tool, client);
+        const agentTool = factory();
+        this.register(agentTool);
+      }
+    }
+  }
+}
+```
+
+### Server Monitoring
+
+```typescript
+// Monitor connection status
+const status = pool.getStatus();
+const connected = status.filter(s => s.connected);
+const disconnected = status.filter(s => !s.connected);
+
+console.log(`${connected.length}/${status.length} servers connected`);
+
+if (disconnected.length > 0) {
+  console.warn(`Disconnected servers: ${disconnected.map(s => s.name).join(", ")}`);
+}
+```
+
+### Dynamic Server Addition
+
+```typescript
+// Add servers based on available plugins
+const pluginServers = await discoverPluginServers();
+for (const server of pluginServers) {
+  await pool.addServer(server);
+}
+```
+
+## Testing
+
+**Mock MCP Server for Testing:**
+
+```typescript
+import { MCPServer } from "indusagi/mcp";
+
+// Create test server
+const testServer = new MCPServer({
+  name: "test-server",
+  version: "1.0.0",
+});
+
+testServer.addTool({
+  name: "test_tool",
+  description: "Test tool",
+  inputSchema: { type: "object" },
+  handler: async () => ({ result: "test" }),
+});
+
+// Use in tests
+```
+
+## Performance Considerations
+
+### Connection Pooling
+- Reuse `MCPClientPool` across requests
+- Share tool registry between requests
+- Don't create new pools per request
+
+### Tool Caching
+```typescript
+// Cache tool list
+const toolsCache = new Map<string, MCPToolDefinition[]>();
+
+async function getCachedTools(client: MCPClient) {
+  if (!toolsCache.has(client.serverName)) {
+    const tools = await client.listTools();
+    toolsCache.set(client.serverName, tools);
+  }
+  return toolsCache.get(client.serverName);
+}
+```
+
+### Timeout Management
+```typescript
+// Set appropriate timeouts
+const client = new MCPClient({
+  name: "slow-server",
+  config: { /* ... */ },
+  timeout: 120000, // 2 minutes for slow operations
+});
+```
+
+## Troubleshooting
+
+### Server Connection Issues
+
+```typescript
+try {
+  await client.connect();
+} catch (error) {
+  if (error.code === MCPErrorCode.CONNECTION_FAILED) {
+    console.error("Failed to connect:", error.message);
+    // Check if command exists
+    // Check if dependencies are installed
+  }
+}
+```
+
+### Tool Execution Failures
+
+```typescript
+try {
+  const result = await client.callTool(toolName, params);
+} catch (error) {
+  if (error.code === MCPErrorCode.INVALID_PARAMETERS) {
+    console.error("Invalid parameters for tool:", toolName);
+    // Log the tool schema
+  }
+}
+```
+
+## API Reference
+
+### MCPClient
+
+```typescript
+class MCPClient {
+  constructor(options: MCPClientOptions);
+  
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  
+  listTools(): Promise<MCPToolDefinition[]>;
+  callTool(name: string, params: any): Promise<any>;
+  
+  listResources(): Promise<MCPResource[]>;
+  readResource(uri: string): Promise<string>;
+  
+  listPrompts(): Promise<MCPPrompt[]>;
+  getPrompt(name: string, params?: Record<string, string>): Promise<string>;
+  
+  get serverName(): string;
+  get isConnected(): boolean;
+}
+```
+
+### MCPClientPool
+
+```typescript
+class MCPClientPool {
+  constructor(options: MCPClientPoolOptions);
+  
+  connectAll(): Promise<void>;
+  disconnectAll(): Promise<void>;
+  
+  addServer(config: MCPConnectionOptions): Promise<void>;
+  removeServer(name: string): Promise<void>;
+  
+  getAllClients(): MCPClient[];
+  getClient(name: string): MCPClient | undefined;
+  
+  getStatus(): MCPServerStatus[];
+}
+```
+
+---
+
+**Version**: 0.12.15  
+**Last Updated**: March 2026  
+**Status**: ✅ Production Ready
