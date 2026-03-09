@@ -352,3 +352,31 @@ h1, h2, h3, h4, h5, h6 {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Enhanced Code Blocks with Copy Button */
+.enhanced-code-block {
+  position: relative;
+  display: block;
+}
+
+.enhanced-code-block pre {
+  margin: 0 !important;
+  border-radius: 0.5rem;
+  padding-top: 2.5rem;
+}
+
+.enhanced-code-block pre code {
+  font-size: 0.85rem;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.enhanced-code-block button {
+  outline: none;
+  border: none;
+  cursor: pointer;
+}
+
+.enhanced-code-block button:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.5);
+  outline-offset: 2px;
+}
