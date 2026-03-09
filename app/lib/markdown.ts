@@ -41,14 +41,6 @@ export function renderMarkdown(markdown: string): { html: string; toc: TocItem[]
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
 
-  // Add copy button to code blocks
-  renderer.code = ({ text, lang }) => {
-    const escapedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const langClass = lang ? ` language-${lang}` : "";
-    const langLabel = lang ? `<div class="code-lang">${lang}</div>` : "";
-    return `<div class="code-block-wrapper">${langLabel}<button class="copy-btn" data-code="${escapedText.replace(/"/g, "&quot;")}">copy</button><pre><code class="${langClass}">${escapedText}</code></pre></div>`;
-  };
-
   const html = marked.parse(markdown, {
     renderer,
     gfm: true,

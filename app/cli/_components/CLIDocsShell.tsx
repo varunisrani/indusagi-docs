@@ -1,7 +1,7 @@
 import type { DocContent, DocEntry } from "../../lib/docs-types";
 import { renderMarkdown } from "../../lib/markdown";
 import CLIDocsNav from "./CLIDocsNav";
-import { Header, CodeCopyButton } from "../../_components";
+import { Header } from "../../_components";
 
 type CLIDocsShellProps = {
   docs: DocEntry[];
@@ -15,7 +15,6 @@ export default function CLIDocsShell({ docs, doc }: CLIDocsShellProps) {
   return (
     <div className="min-h-screen">
       <Header />
-      <CodeCopyButton />
       <div className="pb-16 sm:pb-20 pt-20 lg:pt-16">
         <div className="mx-auto max-w-7xl px-3 sm:px-4">
           <div className="grid grid-cols-1 gap-6 sm:gap-8 lg:gap-10 lg:grid-cols-[260px_1fr] xl:grid-cols-[260px_1fr_220px]">
