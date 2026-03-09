@@ -1,0 +1,341 @@
+# Model Context Protocol (MCP) Guide
+
+## What is MCP?
+
+**Model Context Protocol (MCP)** is a standard that allows AI models to interact with external tools and data sources seamlessly. It enables indusagi to connect with third-party services, databases, and APIs through a unified interface.
+
+In indusagi, MCP provides:
+- **External Tool Integration**: Connect to filesystems, APIs, databases
+- **Automatic Tool Registration**: Servers expose tools that are automatically available
+- **Real-time Data Access**: Query live data from external sources
+- **Environment Configuration**: Secure credential management
+
+## Features Added in v0.1.31
+
+✅ **Multiple MCP Server Support**: Run multiple MCP servers simultaneously  
+✅ **Auto-Tool Registration**: Tools from MCP servers are automatically available  
+✅ **Clean Debug Output**: MCP debug messages suppressed by default (cleaner CLI)  
+✅ **Error Handling**: Improved connection management and error recovery  
+✅ **Configuration Flexibility**: Easy server setup via config file  
+
+## Available MCP Servers
+
+### 1. **Filesystem Server**
+Access and manipulate files on your system
+
+```json
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+    }
+  }
+}
+```
+
+**Use cases:**
+- Read files for context
+- Create and edit files
+- List directory contents
+- Search files
+
+### 2. **GitHub Server**
+Interact with GitHub repositories and issues
+
+```json
+{
+  "github": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {
+      "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+    }
+  }
+}
+```
+
+**Use cases:**
+- Search repositories
+- Read issues and pull requests
+- Create issues
+- Push commits
+
+### 3. **Database Servers**
+
+#### PostgreSQL
+```json
+{
+  "postgres": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-postgres"],
+    "env": {
+      "DATABASE_URL": "postgresql://user:password@localhost:5432/dbname"
+    }
+  }
+}
+```
+
+### 4. **Web Search Server**
+
+#### Brave Search
+```json
+{
+  "brave-search": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "env": {
+      "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+    }
+  }
+}
+```
+
+**Use cases:**
+- Search the web in real-time
+- Get current news and information
+- Fact-check information
+
+### 5. **Browser Automation**
+
+#### Puppeteer (Headless Browser)
+```json
+{
+  "puppeteer": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+  }
+}
+```
+
+**Use cases:**
+- Screenshot websites
+- Fill forms
+- Scrape web content
+- Test web applications
+
+### 6. **Git Server**
+Version control operations
+
+```json
+{
+  "git": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "/path/to/git/repo"]
+  }
+}
+```
+
+### 7. **Fetch Server**
+HTTP/HTTPS requests
+
+```json
+{
+  "fetch": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-fetch"]
+  }
+}
+```
+
+## Setup Guide
+
+### Step 1: Create Configuration File
+
+Create `~/.indusagi/mcp-servers.json`:
+
+```json
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "$HOME"],
+      "env": {}
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### Step 2: Set Environment Variables
+
+```bash
+# For GitHub
+export GITHUB_TOKEN="your_github_token_here"
+
+# For Brave Search
+export BRAVE_API_KEY="your_brave_api_key_here"
+```
+
+### Step 3: Start indusagi
+
+```bash
+indusagi
+```
+
+MCP servers will automatically load and tools will be available.
+
+## Usage Examples
+
+### Example 1: File Operations
+
+```
+User: Read the README.md file
+Assistant: [Uses filesystem MCP to read file]
+```
+
+### Example 2: GitHub Integration
+
+```
+User: Search for open issues in my repository related to "bug"
+Assistant: [Uses GitHub MCP to search issues]
+```
+
+### Example 3: Web Search
+
+```
+User: Search for latest Node.js updates
+Assistant: [Uses Brave Search MCP for real-time web search]
+```
+
+### Example 4: Browser Automation
+
+```
+User: Take a screenshot of https://example.com
+Assistant: [Uses Puppeteer MCP to capture screenshot]
+```
+
+## Troubleshooting
+
+### MCP Server Won't Connect
+
+**Error**: `Failed to connect to [server-name]`
+
+**Solution**:
+1. Check if the command exists: `npx @modelcontextprotocol/server-[name]`
+2. Verify environment variables are set correctly
+3. Check that the command path is accessible
+4. Enable debug mode: `INDUSAGI_DEBUG=1 indusagi`
+
+### Tools Not Appearing
+
+**Problem**: MCP server connected but tools not available
+
+**Solution**:
+1. Check server status: Look for `Connected to [server]` messages
+2. Verify server configuration in `mcp-servers.json`
+3. Reload indusagi (restart the application)
+4. Check tool registry: `indusagi --help | grep -i tools`
+
+### Authentication Issues
+
+**Error**: `GITHUB_TOKEN not found` or similar
+
+**Solution**:
+1. Verify environment variable is set: `echo $GITHUB_TOKEN`
+2. For `.env` file support, place in `~/.indusagi/.env`
+3. Use environment variable syntax: `"${VARIABLE_NAME}"`
+
+### Enable Debug Output
+
+```bash
+# Enable MCP debug messages
+INDUSAGI_DEBUG=1 indusagi
+```
+
+## Best Practices
+
+### 1. **Security**
+- Never commit API tokens to git
+- Use environment variables for secrets
+- Restrict filesystem access to necessary directories only
+
+```json
+{
+  "filesystem": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "$HOME/projects"],
+    "env": {}
+  }
+}
+```
+
+### 2. **Performance**
+- Only enable servers you actually use
+- Some servers (Puppeteer) consume significant resources
+- Monitor memory usage with many servers
+
+### 3. **Error Handling**
+- MCP failures don't crash indusagi
+- If a server is unavailable, its tools won't be available
+- Check console messages for connection status
+
+### 4. **Tool Awareness**
+When requesting tasks, tell the assistant which tools are available:
+
+```
+I have these MCP tools available:
+- Filesystem (read, write, list files)
+- GitHub (search repos, issues)
+- Web Search (real-time search)
+
+Task: Find recent Python security CVEs
+```
+
+## Advanced Configuration
+
+### Multiple Instances of Same Server
+
+```json
+{
+  "servers": {
+    "filesystem-home": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "$HOME"]
+    },
+    "filesystem-projects": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "$HOME/projects"]
+    }
+  }
+}
+```
+
+### Custom Environment Variables
+
+```json
+{
+  "postgres-production": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-postgres"],
+    "env": {
+      "DATABASE_URL": "postgresql://prod-user:${PROD_DB_PASSWORD}@prod.example.com:5432/main"
+    }
+  }
+}
+```
+
+## Reference
+
+- **MCP Specification**: https://modelcontextprotocol.io
+- **Available Servers**: https://github.com/modelcontextprotocol/servers
+- **Create Custom Server**: https://modelcontextprotocol.io/docs/tools/server
+
+## Support
+
+For issues with MCP:
+1. Check if `mcp-servers.json` exists in `~/.indusagi/`
+2. Run with debug: `INDUSAGI_DEBUG=1 indusagi`
+3. Check console output for connection messages
+4. Verify environment variables: `printenv | grep -i TOKEN`
+
+---
+
+**Version**: Introduced in indusagi-coding-agent v0.1.31  
+**Last Updated**: March 2026

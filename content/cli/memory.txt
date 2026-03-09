@@ -1,0 +1,443 @@
+# Memory System Guide
+
+## What is Memory?
+
+**Memory** in indusagi is an intelligent context management system that helps the assistant remember important information across conversations and sessions. Instead of treating each conversation in isolation, memory allows the AI to build a persistent understanding of:
+
+- **User Preferences**: How you like to work
+- **Project Context**: Important details about your projects
+- **Historical Knowledge**: Decisions made in previous sessions
+- **User Profile**: Your skills, background, and work patterns
+
+## Features Added in v0.1.31
+
+✅ **Semantic Memory Search**: Find relevant past conversations using meaning, not just keywords  
+✅ **Vector Embeddings**: Convert conversations to semantic vectors for intelligent retrieval  
+✅ **Persistent Storage**: Memory is saved between sessions  
+✅ **OpenAI Embeddings**: High-quality semantic understanding  
+✅ **In-Memory Storage**: Fast, local storage without external dependencies  
+✅ **Vector Store**: Efficient similarity search through conversation history  
+
+## How Memory Works
+
+### 1. **Storage**
+When you have important conversations, they're stored in memory:
+
+```
+User: "I prefer TypeScript over JavaScript for all my projects"
+→ Stored in memory as semantic vector
+→ Retrieved when relevant to future tasks
+```
+
+### 2. **Retrieval**
+When you give a new task, memory searches for relevant past context:
+
+```
+User: "Create a new API endpoint"
+Memory finds: Previous conversations about your TypeScript preference
+→ Assistant uses this context automatically
+```
+
+### 3. **Integration**
+Memory context is automatically injected into conversations:
+
+```
+Assistant: "I remember you prefer TypeScript. Shall I create this endpoint in TypeScript?"
+```
+
+## Setup Guide
+
+### Step 1: Automatic Setup
+
+Memory is enabled by default! The first time you use it:
+
+```bash
+indusagi
+# Memory initializes automatically
+```
+
+### Step 2: Verify OpenAI API Key (Optional but Recommended)
+
+For better semantic understanding, set your OpenAI key:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Without it, memory uses local embedding (still works well, just less accurate).
+
+### Step 3: Start Using Memory
+
+Simply use indusagi normally. Memory tracks everything:
+
+```bash
+indusagi
+
+# Have a conversation, make decisions, work on projects
+# Memory remembers all of this automatically
+```
+
+## Configuration
+
+### Memory Configuration File
+
+Memory can be configured in `~/.indusagi/memory.json`:
+
+```json
+{
+  "enabled": true,
+  "storage": "in-memory",
+  "vectorStore": "in-memory",
+  "embedder": "openai",
+  "embedderOptions": {
+    "model": "text-embedding-3-small",
+    "apiKey": "${OPENAI_API_KEY}"
+  },
+  "maxMemoryItems": 1000,
+  "similarityThreshold": 0.7
+}
+```
+
+### Memory File Locations
+
+```
+~/.indusagi/
+├── memory.json          # Configuration
+├── memory/
+│   ├── vectors.json    # Stored embeddings
+│   └── store.json      # Memory items
+└── sessions/
+    └── [session-id]/   # Session memory
+```
+
+## Usage Examples
+
+### Example 1: Project Context Memory
+
+**Session 1:**
+```
+User: I'm building a REST API for an e-commerce platform using Node.js and TypeScript
+
+Memory stores: 
+- Project type: REST API, e-commerce
+- Tech stack: Node.js, TypeScript
+- Platform: REST
+```
+
+**Session 2 (Days Later):**
+```
+User: How should I structure my database?
+
+Assistant remembers from Session 1:
+"Given your e-commerce platform in TypeScript, I recommend this schema..."
+(Uses memory context automatically)
+```
+
+### Example 2: User Preference Memory
+
+**Session 1:**
+```
+User: I always prefer shorter function names and minimal comments
+
+Memory stores:
+- Code style: Short names, minimal comments
+- Preference: Clean, concise code
+```
+
+**Session 2:**
+```
+User: Generate utility functions for date handling
+
+Assistant remembers:
+"I'll use short, concise names (parseDate, formatDate)"
+(Applies remembered preferences)
+```
+
+### Example 3: Architecture Decisions
+
+**Session 1:**
+```
+User: We decided to use Redis for caching in our system
+
+Memory stores:
+- Architecture decision: Redis for caching
+- Infrastructure: Redis instance required
+```
+
+**Session 3:**
+```
+User: We're getting slow response times
+
+Assistant remembers:
+"We use Redis for caching. Let me check if there's a cache issue..."
+(Uses architectural context from memory)
+```
+
+## Memory Commands
+
+### View Memory Statistics
+
+```bash
+indusagi --show-memory-stats
+```
+
+Output:
+```
+Memory Statistics:
+- Total stored items: 145
+- Vector embeddings: 145
+- Storage size: 2.4 MB
+- Similarity threshold: 0.7
+- Last updated: 2026-03-09T14:30:00Z
+```
+
+### Export Memory
+
+```bash
+indusagi --export-memory > my_memory.json
+```
+
+### Clear Memory
+
+```bash
+indusagi --clear-memory
+```
+
+⚠️ **Warning**: This permanently deletes all memory!
+
+### Search Memory
+
+```bash
+indusagi --search-memory "TypeScript preferences"
+```
+
+Output:
+```
+Found 3 relevant memories:
+
+1. "I prefer TypeScript over JavaScript for all projects"
+   Score: 0.92 | Date: 2026-02-15
+
+2. "Always use strict mode and enable all tsconfig checks"
+   Score: 0.87 | Date: 2026-02-10
+
+3. "I like functional programming patterns in TypeScript"
+   Score: 0.81 | Date: 2026-02-08
+```
+
+## Best Practices
+
+### 1. **Be Explicit About Important Context**
+
+Good:
+```
+User: "I prefer TypeScript with strict configs for all my projects"
+```
+
+Less effective:
+```
+User: "TypeScript is okay"
+```
+
+### 2. **Share Preferences and Constraints**
+
+Tell memory about:
+- Your preferred tech stack
+- Code style preferences
+- Project constraints
+- Team standards
+- Performance requirements
+
+```
+User: "We have these constraints:
+- Must run on Node.js 18+
+- TypeScript with strict mode
+- Max bundle size 500KB
+- Use functional programming"
+```
+
+### 3. **Reference Past Decisions**
+
+Reinforce memory by referring to previous conversations:
+
+```
+User: "Like we decided before, let's use Redis for this"
+# Memory strengthens the Redis caching decision
+```
+
+### 4. **Provide Context at Session Start**
+
+Start new sessions with relevant context:
+
+```
+User: "Hi, continuing the e-commerce API we started yesterday.
+We're using TypeScript, Node.js, PostgreSQL."
+
+# Memory is refreshed with context
+```
+
+### 5. **Update Information When Things Change**
+
+Keep memory accurate:
+
+```
+User: "Update: We're switching from PostgreSQL to MongoDB"
+# Memory updates the database decision
+```
+
+## Semantic Search Details
+
+### How Similarity Works
+
+Memory uses cosine similarity (0.0 to 1.0 scale):
+
+- **0.95+**: Highly relevant (definitely use)
+- **0.80-0.95**: Very relevant (likely use)
+- **0.70-0.80**: Relevant (may use if needed)
+- **<0.70**: Not relevant (filtered out)
+
+### Customize Threshold
+
+More aggressive memory retrieval:
+```bash
+MEMORY_THRESHOLD=0.5 indusagi
+# Less selective, more memory usage
+```
+
+More conservative:
+```bash
+MEMORY_THRESHOLD=0.9 indusagi
+# More selective, less noise
+```
+
+## Troubleshooting
+
+### Memory Not Saving
+
+**Error**: Memory not persisting between sessions
+
+**Solution**:
+1. Check write permissions: `ls -la ~/.indusagi/memory/`
+2. Ensure OpenAI API key is set (if using OpenAI embeddings)
+3. Check disk space: `df -h`
+
+### Memory Search Returns Irrelevant Results
+
+**Solution**:
+1. Increase similarity threshold: `MEMORY_THRESHOLD=0.8 indusagi`
+2. Be more specific when describing context
+3. Clear irrelevant memories: `indusagi --clear-memory`
+
+### Slow Response with Large Memory
+
+**Solution**:
+1. Disable memory temporarily: `MEMORY_ENABLED=false indusagi`
+2. Export old sessions: `indusagi --export-memory > archive.json`
+3. Clear old memories: `indusagi --clear-memory`
+4. Rebuild memory: Start fresh and re-add important context
+
+### Memory Size Growing Too Large
+
+Default limit: 1000 items
+
+```bash
+# Override in ~/.indusagi/memory.json
+{
+  "maxMemoryItems": 500
+}
+```
+
+When limit reached, oldest low-relevance items are removed.
+
+## Advanced Features
+
+### Custom Memory Items
+
+Manually add important items to memory:
+
+```bash
+indusagi --add-memory "Our project uses REST API with JWT authentication"
+```
+
+### Memory Decay
+
+Memory items have implicit importance:
+- Recent items weighted higher
+- Referenced items boosted
+- Old unreferenced items gradually deprioritized
+
+### Contextual Memory
+
+Memory is scoped to sessions:
+- Same memory across sessions in same project
+- Different memory for different projects
+- Can share memory across projects with `--merge-memory`
+
+## Privacy & Security
+
+### Memory Storage
+- Stored locally in `~/.indusagi/memory/`
+- Never sent to third parties (except OpenAI for embeddings)
+- Encrypted at rest (optional, requires setup)
+
+### Clear Memory for Privacy
+```bash
+indusagi --clear-memory
+```
+
+### Disable Memory
+```bash
+MEMORY_ENABLED=false indusagi
+```
+
+## Performance Impact
+
+Memory has minimal performance impact:
+
+- **Storage**: ~2KB per item (2MB for 1000 items)
+- **Retrieval**: <100ms to find relevant memories
+- **Overhead**: <5% additional memory usage
+
+## Reference
+
+### Memory Configuration Options
+
+```json
+{
+  "enabled": true,
+  "storage": "in-memory",                    // or "sqlite", "mongodb"
+  "vectorStore": "in-memory",                // or "pinecone", "weaviate"
+  "embedder": "openai",                      // or "local", "huggingface"
+  "embedderOptions": {
+    "model": "text-embedding-3-small",
+    "apiKey": "${OPENAI_API_KEY}"
+  },
+  "maxMemoryItems": 1000,
+  "similarityThreshold": 0.7,
+  "retentionDays": 90,
+  "autoArchiveAfterDays": 30
+}
+```
+
+### Environment Variables
+
+```bash
+MEMORY_ENABLED=true/false              # Enable/disable memory
+MEMORY_THRESHOLD=0.0-1.0               # Similarity threshold
+OPENAI_API_KEY=sk-...                  # For semantic embeddings
+MEMORY_STORAGE=in-memory               # Storage backend
+```
+
+## Support
+
+For memory issues:
+1. Check logs: `tail -f ~/.indusagi/agent.log`
+2. Export debug info: `indusagi --debug-memory`
+3. Verify configuration: `cat ~/.indusagi/memory.json`
+4. Clear and rebuild: `indusagi --clear-memory`
+
+---
+
+**Version**: Introduced in indusagi-coding-agent v0.1.31  
+**Last Updated**: March 2026  
+**Status**: ✅ Production Ready
