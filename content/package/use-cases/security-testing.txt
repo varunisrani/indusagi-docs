@@ -173,7 +173,7 @@ class SecurityContextProvider extends SandboxRuntimeProvider {
 
 ## Responsible Use
 
-> ⚠️ **Only test applications you own or have permission to test**
+>  **Only test applications you own or have permission to test**
 
 - Follow responsible disclosure practices
 - Respect rate limits and terms of service

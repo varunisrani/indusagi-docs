@@ -5,13 +5,13 @@
 The `@indusagi/bg-process` extension provides complete background process management for indusagi. Run long-running commands, monitor their output, get alerts on completion, and manage them all from your AI agent.
 
 **Key Features:**
-- 🚀 Start processes in background without blocking
-- 📊 List and monitor all running processes
-- 📝 Stream or fetch process output on demand
-- 🎯 Smart alerts (on success, failure, crash, kill)
+-  Start processes in background without blocking
+-  List and monitor all running processes
+- [Notes] Stream or fetch process output on demand
+-  Smart alerts (on success, failure, crash, kill)
 - 🧹 Auto-cleanup when session ends
-- 📂 File-based logging (no memory overhead)
-- 🎮 Interactive CLI with full keyboard control
+- [Files] File-based logging (no memory overhead)
+- [Interactive] Interactive CLI with full keyboard control
 
 ## Installation
 
@@ -340,9 +340,9 @@ $TMPDIR/pi-processes-{timestamp}/
 
 ## Platform Support
 
-- ✅ macOS 10.15+
-- ✅ Linux (glibc 2.17+)
-- ❌ Windows (not supported)
+- · macOS 10.15+
+- · Linux (glibc 2.17+)
+- × Windows (not supported)
 
 ## See Also
 

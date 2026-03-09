@@ -2,24 +2,24 @@
 
 This document outlines the major features added in indusagi-coding-agent v0.1.31.
 
-## 🎯 Quick Start
+##  Quick Start
 
 - **[MCP Guide](./MCP.md)** - Learn how to use Model Context Protocol for external integrations
 - **[Memory Guide](./MEMORY.md)** - Learn how Memory helps the assistant remember context
 
-## 📦 Feature Summary
+## [PKG] Feature Summary
 
 ### 1. Model Context Protocol (MCP)
 
 Connect your AI assistant to external tools and services.
 
 **What it enables:**
-- 🔧 Access external APIs and tools
-- 📁 Filesystem operations
-- 🐙 GitHub integration
-- 🔍 Web search and scraping
-- 🗄️ Database queries
-- 🌐 Real-time web access
+-  Access external APIs and tools
+-  Filesystem operations
+- [GitHub] GitHub integration
+- [Search] Web search and scraping
+- [DB] Database queries
+- [Web] Real-time web access
 
 **Quick setup:**
 ```bash
@@ -40,7 +40,7 @@ User: "What's the latest Node.js update?"
 # Uses web search MCP
 ```
 
-👉 [**Read Full MCP Guide →**](./MCP.md)
+ [**Read Full MCP Guide →**](./MCP.md)
 
 ---
 
@@ -49,11 +49,11 @@ User: "What's the latest Node.js update?"
 The assistant now remembers important context across sessions.
 
 **What it enables:**
-- 💾 Persistent conversation history
+- [Storage] Persistent conversation history
 - 🧠 Semantic understanding of past decisions
-- 🎯 Context-aware responses
-- ⚡ Faster problem-solving
-- 📚 Project knowledge accumulation
+-  Context-aware responses
+-  Faster problem-solving
+-  Project knowledge accumulation
 
 **Automatic setup:**
 Memory works out of the box. Just start using indusagi!
@@ -69,11 +69,11 @@ Assistant: "I'll use TypeScript as you prefer..."
 # Assistant remembers your preference!
 ```
 
-👉 [**Read Full Memory Guide →**](./MEMORY.md)
+ [**Read Full Memory Guide →**](./MEMORY.md)
 
 ---
 
-## 🚀 Feature Comparison
+##  Feature Comparison
 
 | Feature | Before v0.1.31 | After v0.1.31 |
 |---------|----------------|---------------|
@@ -86,7 +86,7 @@ Assistant: "I'll use TypeScript as you prefer..."
 
 ---
 
-## 📋 Configuration Files
+##  Configuration Files
 
 ### MCP Configuration
 **Location**: `~/.indusagi/mcp-servers.json`
@@ -152,7 +152,7 @@ Result: Recommendations tailored to your use case
 
 ---
 
-## 📊 Architecture
+##  Architecture
 
 ### MCP Integration
 ```
@@ -179,7 +179,7 @@ Enhanced Response
 
 ---
 
-## ⚙️ Environment Variables
+## [Config] Environment Variables
 
 ### MCP
 ```bash
@@ -196,7 +196,7 @@ OPENAI_API_KEY=sk-...         # For semantic embeddings
 
 ---
 
-## 🔗 Integration with Other Features
+##  Integration with Other Features
 
 ### GPT-5.4 Models
 v0.1.31 includes full support for GPT-5.4:
@@ -212,7 +212,7 @@ Enable with: `INDUSAGI_DEBUG=1 indusagi`
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Step 1: Update to v0.1.31
 ```bash
@@ -246,7 +246,7 @@ Memory and MCP are ready to use!
 
 ---
 
-## 📚 Documentation Index
+##  Documentation Index
 
 | Topic | Document |
 |-------|----------|
@@ -257,7 +257,7 @@ Memory and MCP are ready to use!
 
 ---
 
-## 💡 Tips & Tricks
+##  Tips & Tricks
 
 ### MCP Tips
 - Start with filesystem and web search for maximum value
@@ -272,7 +272,7 @@ Memory and MCP are ready to use!
 
 ---
 
-## ❓ FAQ
+## [Q&A] FAQ
 
 **Q: Is my memory data stored online?**  
 A: No! Memory is stored locally in `~/.indusagi/memory/`. Only OpenAI embeddings API may be called (if enabled).
@@ -291,7 +291,7 @@ A: You don't need to! Memory automatically manages old items. Clear only if priv
 
 ---
 
-## 🐛 Getting Help
+##  Getting Help
 
 If you encounter issues:
 
@@ -303,4 +303,4 @@ If you encounter issues:
 
 **Version**: 0.1.31  
 **Released**: March 2026  
-**Status**: ✅ Production Ready
+**Status**: · Production Ready

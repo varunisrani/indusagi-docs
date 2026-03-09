@@ -750,7 +750,7 @@ ctx.ui.setWidget("my-widget", ["Line 1", "Line 2"], { placement: "belowEditor" }
 ctx.ui.setWidget("my-widget", (_tui, theme) => {
   const lines = items.map((item, i) =>
     item.done
-      ? theme.fg("success", "✓ ") + theme.fg("muted", item.text)
+      ? theme.fg("success", "[CHECK] ") + theme.fg("muted", item.text)
       : theme.fg("dim", "○ ") + item.text
   );
   return {

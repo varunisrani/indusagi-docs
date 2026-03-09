@@ -603,4 +603,4 @@ const semanticRecall = new SemanticRecall({ embedder });
 
 **Version**: 0.12.15  
 **Last Updated**: March 2026  
-**Status**: ✅ Production Ready
+**Status**: · Production Ready

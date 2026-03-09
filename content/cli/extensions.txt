@@ -1311,7 +1311,7 @@ renderResult(result, { expanded, isPartial }, theme) {
   }
 
   // Normal result - support expanded view (Ctrl+O)
-  let text = theme.fg("success", "✓ Done");
+  let text = theme.fg("success", "[CHECK] Done");
   if (expanded && result.details?.items) {
     for (const item of result.details.items) {
       text += "\n  " + theme.fg("dim", item);
@@ -1329,7 +1329,7 @@ Use `keyHint()` to display keybinding hints that respect user's keybinding confi
 import { keyHint } from "indusagi-coding-agent";
 
 renderResult(result, { expanded }, theme) {
-  let text = theme.fg("success", "✓ Done");
+  let text = theme.fg("success", "[CHECK] Done");
   if (!expanded) {
     text += ` (${keyHint("expandTools", "to expand")})`;
   }

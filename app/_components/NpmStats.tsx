@@ -119,7 +119,7 @@ export function NpmStats({ package: pkg, label }: NpmStatsProps) {
     return (
       <div className="surface-strong rounded-xl sm:rounded-2xl p-4 sm:p-6">
         <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
-          <div className="text-red-500 mb-2 text-lg sm:text-xl">⚠️</div>
+          <AlertIcon />
           <div className="text-xs sm:text-sm text-red-500">{error}</div>
           <button
             onClick={fetchStats}
@@ -241,6 +241,16 @@ function ExternalLinkIcon() {
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15,3 21,3 21,9" />
       <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mb-2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
   );
 }

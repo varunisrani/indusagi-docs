@@ -11,12 +11,12 @@
 
 ## Features Added in v0.1.31
 
-✅ **Semantic Memory Search**: Find relevant past conversations using meaning, not just keywords  
-✅ **Vector Embeddings**: Convert conversations to semantic vectors for intelligent retrieval  
-✅ **Persistent Storage**: Memory is saved between sessions  
-✅ **OpenAI Embeddings**: High-quality semantic understanding  
-✅ **In-Memory Storage**: Fast, local storage without external dependencies  
-✅ **Vector Store**: Efficient similarity search through conversation history  
+· **Semantic Memory Search**: Find relevant past conversations using meaning, not just keywords  
+· **Vector Embeddings**: Convert conversations to semantic vectors for intelligent retrieval  
+· **Persistent Storage**: Memory is saved between sessions  
+· **OpenAI Embeddings**: High-quality semantic understanding  
+· **In-Memory Storage**: Fast, local storage without external dependencies  
+· **Vector Store**: Efficient similarity search through conversation history  
 
 ## How Memory Works
 
@@ -203,7 +203,7 @@ indusagi --export-memory > my_memory.json
 indusagi --clear-memory
 ```
 
-⚠️ **Warning**: This permanently deletes all memory!
+ **Warning**: This permanently deletes all memory!
 
 ### Search Memory
 
@@ -440,4 +440,4 @@ For memory issues:
 
 **Version**: Introduced in indusagi-coding-agent v0.1.31  
 **Last Updated**: March 2026  
-**Status**: ✅ Production Ready
+**Status**: · Production Ready

@@ -226,7 +226,7 @@ export function Header() {
               >
                 <div className="flex items-center gap-3">
                   <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#fe6027] to-[#ff8a50] flex items-center justify-center text-white text-xs">
-                    📦
+                    PKG
                   </span>
                   Package Docs
                 </div>
@@ -275,7 +275,7 @@ export function Header() {
               >
                 <div className="flex items-center gap-3">
                   <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white text-xs">
-                    ⚡
+                    CLI
                   </span>
                   CLI Docs
                 </div>

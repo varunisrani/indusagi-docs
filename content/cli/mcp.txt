@@ -12,11 +12,11 @@ In indusagi, MCP provides:
 
 ## Features Added in v0.1.31
 
-✅ **Multiple MCP Server Support**: Run multiple MCP servers simultaneously  
-✅ **Auto-Tool Registration**: Tools from MCP servers are automatically available  
-✅ **Clean Debug Output**: MCP debug messages suppressed by default (cleaner CLI)  
-✅ **Error Handling**: Improved connection management and error recovery  
-✅ **Configuration Flexibility**: Easy server setup via config file  
+· **Multiple MCP Server Support**: Run multiple MCP servers simultaneously  
+· **Auto-Tool Registration**: Tools from MCP servers are automatically available  
+· **Clean Debug Output**: MCP debug messages suppressed by default (cleaner CLI)  
+· **Error Handling**: Improved connection management and error recovery  
+· **Configuration Flexibility**: Easy server setup via config file  
 
 ## Available MCP Servers
 

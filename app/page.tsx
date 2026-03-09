@@ -27,7 +27,7 @@ export default function Home() {
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#fe6027] to-[#ff8a50] flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  📦
+                  PKG
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
@@ -62,7 +62,7 @@ export default function Home() {
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  ⚡
+                  CLI
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
