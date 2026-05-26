@@ -4,7 +4,7 @@ import { NpmStats } from "./_components/NpmStats";
 
 export default function Home() {
   return (
-    <div className="min-h-screen">
+    <main className="min-h-screen">
       <Header />
       <div className="flex items-center justify-center px-3 sm:px-4 pt-16 sm:pt-20 pb-8 sm:pb-10">
         <div className="max-w-5xl w-full">
@@ -111,6 +111,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

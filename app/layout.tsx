@@ -13,8 +13,35 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Indusagi Documentation",
-  description: "Developer documentation for Indusagi packages and Coding Agent CLI.",
+  metadataBase: new URL('https://www.indusagi.com'),
+  title: {
+    template: '%s | Indusagi Documentation',
+    default: 'Indusagi Documentation',
+  },
+  description: 'Developer documentation for Indusagi TypeScript AI agent framework and terminal-first Coding Agent CLI.',
+  keywords: ['indusagi', 'ai agent', 'typescript', 'coding agent', 'cli', 'terminal ai', 'next.js', 'open source'],
+  openGraph: {
+    title: 'Indusagi Documentation',
+    description: 'Developer documentation for Indusagi packages and Coding Agent CLI.',
+    url: 'https://www.indusagi.com',
+    siteName: 'Indusagi',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Indusagi Documentation',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Indusagi Documentation',
+    description: 'Developer documentation for Indusagi packages and Coding Agent CLI.',
+    images: ['/og-image.png'],
+  },
 };
 
 export const viewport: Viewport = {
