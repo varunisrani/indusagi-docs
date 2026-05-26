@@ -12,6 +12,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/use-cases/memory-management`, lastModified: new Date() },
     { url: `${baseUrl}/indusagi-vs-cursor`, lastModified: new Date() },
     { url: `${baseUrl}/indusagi-vs-aider`, lastModified: new Date() },
+    { url: `${baseUrl}/best-ai-agent-framework-india`, lastModified: new Date() },
+    { url: `${baseUrl}/sovereign-ai-indusagi`, lastModified: new Date() },
+    { url: `${baseUrl}/use-cases/india-fintech-startups`, lastModified: new Date() },
   ];
 
   const packageDocs = await getPackageDocsManifest();
