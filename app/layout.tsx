@@ -42,6 +42,9 @@ export const metadata: Metadata = {
     description: 'Developer documentation for Indusagi packages and Coding Agent CLI.',
     images: ['/og-image.png'],
   },
+  alternates: {
+    canonical: '/',
+  },
 };
 
 export const viewport: Viewport = {
