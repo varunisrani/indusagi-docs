@@ -3,8 +3,106 @@ import { Header } from "./_components/Header";
 import { NpmStats } from "./_components/NpmStats";
 
 export default function Home() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://www.indusagi.com/#sdk",
+        "name": "Indusagi SDK",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "All",
+        "downloadUrl": "https://www.npmjs.com/package/indusagi",
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        },
+        "description": "Fast, open-source TypeScript SDK and framework for building autonomous AI agents with full control over memory, tools, and streaming.",
+        "codeRepository": "https://github.com/varunisrani/indusagi",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Organization",
+          "name": "Indusagi",
+          "url": "https://www.indusagi.com"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://www.indusagi.com/#cli",
+        "name": "Indusagi Coding Agent CLI",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "All",
+        "downloadUrl": "https://www.npmjs.com/package/indusagi-coding-agent",
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        },
+        "description": "Powerful terminal-first AI assistant CLI with extensions, custom skills, Hooks, background agent threads, and RPC capabilities.",
+        "codeRepository": "https://github.com/varunisrani/indusagi-coding-agent",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Organization",
+          "name": "Indusagi",
+          "url": "https://www.indusagi.com"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://www.indusagi.com/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Indusagi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Indusagi is an open-source developer framework consisting of a TypeScript SDK and a terminal-first Coding Agent CLI designed to build, run, and scale highly customized AI agents."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is Indusagi free and MIT licensed?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Both the Indusagi TypeScript package and the Coding Agent CLI are fully open-source under the MIT license, free for both individual and commercial application use."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Indusagi support local LLM models?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Indusagi supports local LLM execution via Ollama, Bedrock, Llama.cpp, and other local providers, in addition to cloud APIs from Anthropic, OpenAI, and Groq."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I extend the Coding Agent CLI with custom skills?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. The Indusagi Coding Agent CLI has native support for custom skills, hook intercepts, background execution sub-agents, and Model Context Protocol (MCP) server configurations."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does memory management work in Indusagi?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Indusagi features a sophisticated multi-tier memory system including semantic memory search, long-term storage, and intelligent context compaction to minimize cost and maximize relevance."
+            }
+          }
+        ]
+      }
+    ]
+  };
+
   return (
     <main className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <div className="flex items-center justify-center px-3 sm:px-4 pt-16 sm:pt-20 pb-8 sm:pb-10">
         <div className="max-w-5xl w-full">
