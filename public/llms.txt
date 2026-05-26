@@ -31,6 +31,12 @@ https://www.indusagi.com
 - CLI docs: https://www.indusagi.com/cli
 - Getting started: https://www.indusagi.com/docs/getting-started
 
+## Comparisons & Use Cases
+- Terminal Coding Assistant: https://www.indusagi.com/use-cases/coding-agent
+- Agent Memory Management: https://www.indusagi.com/use-cases/memory-management
+- Indusagi vs Cursor Comparison: https://www.indusagi.com/indusagi-vs-cursor
+- Indusagi vs Aider Comparison: https://www.indusagi.com/indusagi-vs-aider
+
 ## GitHub
 https://github.com/varunisrani/indusagi
 

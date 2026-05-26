@@ -8,6 +8,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: baseUrl, lastModified: new Date() },
     { url: `${baseUrl}/docs`, lastModified: new Date() },
     { url: `${baseUrl}/cli`, lastModified: new Date() },
+    { url: `${baseUrl}/use-cases/coding-agent`, lastModified: new Date() },
+    { url: `${baseUrl}/use-cases/memory-management`, lastModified: new Date() },
+    { url: `${baseUrl}/indusagi-vs-cursor`, lastModified: new Date() },
+    { url: `${baseUrl}/indusagi-vs-aider`, lastModified: new Date() },
   ];
 
   const packageDocs = await getPackageDocsManifest();
