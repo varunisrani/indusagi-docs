@@ -1,1048 +1,316 @@
-# RPC Mode
+# Link / JSON-RPC Protocol
 
-RPC mode enables headless operation of the coding agent via a JSON protocol over stdin/stdout. This is useful for embedding the agent in other applications, IDEs, or custom UIs.
+> Drive a headless agent from a parent process: `indus --json` speaks a JSON-RPC 2.0 line protocol over stdin/stdout.
 
-**Note for Node.js/TypeScript users**: If you're building a Node.js application, consider using `AgentSession` directly from `indusagi-coding-agent` instead of spawning a subprocess. See [`src/core/agent-session.ts`](../src/core/agent-session.ts) for the API. For a subprocess-based TypeScript client, see [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts).
+The **link** channel is the long-lived, bidirectional way to talk to a session
+from outside the interactive terminal. It is a JSON-RPC 2.0 server that
+dispatches framed requests through a declarative operation registry, streams
+uncorrelated event signals back, and round-trips interactive dialogs. Use it to
+embed the agent in another application, an IDE, or a language-agnostic client.
 
-## Starting RPC Mode
+**Node.js / TypeScript users:** if you are in the same process, prefer embedding
+the agent directly via the package barrel rather than spawning a subprocess —
+see the [SDK](sdk.md). The link is for process isolation and cross-language
+clients.
+
+## Table of Contents
+
+- [Starting the link](#starting-the-link)
+- [Framing (NDJSON)](#framing-ndjson)
+- [Envelope (JSON-RPC 2.0)](#envelope-json-rpc-20)
+- [Operations](#operations)
+- [Snapshots](#snapshots)
+- [Signals](#signals)
+- [Dialogs (ask / tell)](#dialogs-ask--tell)
+- [Error codes](#error-codes)
+- [Example client (Python)](#example-client-python)
+
+## Starting the link
 
 ```bash
-indusagi --mode rpc [options]
+indus --json [options]
 ```
 
-Common options:
-- `--provider <name>`: Set the LLM provider (anthropic, openai, google, etc.)
-- `--model <id>`: Set the model ID
-- `--no-session`: Disable session persistence
-- `--session-dir <path>`: Custom session storage directory
+`--json` (alias `--rpc`) resolves to the `rpc` output mode, which dispatches to
+the link runner (`src/boot/runners/link-runner.ts`). The runner assembles a
+`SessionConductor` for the invocation and serves the `SESSION_OPS` registry over
+`process.stdin` / `process.stdout` via `createLinkServer`. It resolves exit code
+`0` once the inbound stream ends.
 
-## Protocol Overview
+Options that configure the session apply here too (parsed in
+`src/launch/invocation/flags.ts`):
 
-- **Commands**: JSON objects sent to stdin, one per line
-- **Responses**: JSON objects with `type: "response"` indicating command success/failure
-- **Events**: Agent events streamed to stdout as JSON lines
+| Flag | Effect |
+|------|--------|
+| `--model <id>` / `-m` | Bind a specific model (provider-qualified or bare). |
+| `--account <name>` | Authenticate with a named stored credential account. |
+| `--thinking <level>` | Reasoning effort: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`. |
+| `--cwd <path>` | Scope the session to a working directory. |
+| `--system <text>` / `--append-system <text>` | Replace / extend the system prompt. |
+| `--tools <a,b>` / `--no-tools` | Restrict or disable built-in tools. |
+| `--mcp <a,b>` | Attach external MCP server endpoints. |
 
-All commands support an optional `id` field for request/response correlation. If provided, the corresponding response will include the same `id`.
+> There is no `--no-session` or `--session-dir` flag. Persistence is automatic:
+> the conductor writes a per-cwd transcript under the workspace `sessions/`
+> directory (`sessionScopeDir()` in `src/boot/runners/session.ts`).
 
-## Commands
+## Framing (NDJSON)
 
-### Prompting
+The transport is **NDJSON**: one JSON value per line, each terminated by a single
+`\n`. The framer (`src/channels/framer.ts`) escapes the two Unicode line
+separators U+2028 and U+2029 — legal inside a JSON string but fatal to a naive
+line splitter — so any value round-trips exactly. The decoder splits strictly on
+`\n` and tolerates a trailing unterminated final line.
 
-#### prompt
+Three frame shapes travel **from** the server to the client:
 
-Send a user prompt to the agent. Returns immediately; events stream asynchronously.
+- a correlated **reply** (`{ jsonrpc, id, result | error }`),
+- an uncorrelated **signal** (`{ type: "signal", name, body }`),
+- a dialog **ask** (`{ type: "ask", id, kind, payload }`) or **tell** (`{ type: "tell", kind, payload }`).
 
-```json
-{"id": "req-1", "type": "prompt", "message": "Hello, world!"}
-```
+Two travel **to** the server:
 
-With images:
-```json
-{"type": "prompt", "message": "What's in this image?", "images": [{"type": "image", "source": {"type": "base64", "mediaType": "image/png", "data": "..."}}]}
-```
+- a **request** (`{ jsonrpc, id?, method, params? }`),
+- a dialog **answer** (`{ type: "answer", id, value }`).
 
-**During streaming**: If the agent is already streaming, you must specify `streamingBehavior` to queue the message:
+## Envelope (JSON-RPC 2.0)
 
-```json
-{"type": "prompt", "message": "New instruction", "streamingBehavior": "steer"}
-```
+Every request and reply carries `"jsonrpc": "2.0"` (the `PROTOCOL_VERSION`
+constant). The shapes are pinned in `src/channels/contract.ts`.
 
-- `"steer"`: Interrupt the agent mid-run. Message is delivered after current tool execution, remaining tools are skipped.
-- `"followUp"`: Wait until the agent finishes. Message is delivered only when agent stops.
-
-If the agent is streaming and no `streamingBehavior` is specified, the command returns an error.
-
-**Extension commands**: If the message is an extension command (e.g., `/mycommand`), it executes immediately even during streaming. Extension commands manage their own LLM interaction via `indusagi.sendMessage()`.
-
-**Input expansion**: Skill commands (`/skill:name`) and prompt templates (`/template`) are expanded before sending/queueing.
-
-Response:
-```json
-{"id": "req-1", "type": "response", "command": "prompt", "success": true}
-```
-
-The `images` field is optional. Each image uses `ImageContent` format with base64 or URL source.
-
-#### steer
-
-Queue a steering message to interrupt the agent mid-run. Delivered after current tool execution, remaining tools are skipped. Skill commands and prompt templates are expanded. Extension commands are not allowed (use `prompt` instead).
+A request:
 
 ```json
-{"type": "steer", "message": "Stop and do this instead"}
+{"jsonrpc": "2.0", "id": "lnk-1", "method": "submit", "params": {"input": "Hello"}}
 ```
 
-Response:
-```json
-{"type": "response", "command": "steer", "success": true}
-```
+- `id` correlates the eventual reply. **A request without an `id` is a
+  notification** — it is dispatched for its effect and never replied to.
+- `method` selects the operation by its wire name.
+- `params` carries the operation payload (absent when the op takes none).
 
-See [set_steering_mode](#set_steering_mode) for controlling how steering messages are processed.
-
-#### follow_up
-
-Queue a follow-up message to be processed after the agent finishes. Delivered only when agent has no more tool calls or steering messages. Skill commands and prompt templates are expanded. Extension commands are not allowed (use `prompt` instead).
+A successful reply:
 
 ```json
-{"type": "follow_up", "message": "After you're done, also do this"}
+{"jsonrpc": "2.0", "id": "lnk-1", "result": { ... }}
 ```
 
-Response:
-```json
-{"type": "response", "command": "follow_up", "success": true}
-```
-
-See [set_follow_up_mode](#set_follow_up_mode) for controlling how follow-up messages are processed.
-
-#### abort
-
-Abort the current agent operation.
+A failed reply:
 
 ```json
-{"type": "abort"}
+{"jsonrpc": "2.0", "id": "lnk-1", "error": {"code": -32601, "message": "Unknown op: foo", "data": {"method": "foo"}}}
 ```
 
-Response:
-```json
-{"type": "response", "command": "abort", "success": true}
-```
+Discriminate by the presence of the `result` vs `error` key. The driver mints
+string ids prefixed with `lnk-` (`REQUEST_ID_PREFIX`).
 
-#### new_session
+## Operations
 
-Start a fresh session. Can be cancelled by a `session_before_switch` extension event handler.
+The full operation set is the declarative `SESSION_OPS` registry in
+`src/channels/session-ops.ts`. Every op delegates to the `SessionConductor`; the
+server dispatches by a map lookup, and the typed client method set is exactly
+these keys.
 
-```json
-{"type": "new_session"}
-```
+| Method | Params | Result | Effect |
+|--------|--------|--------|--------|
+| `submit` | `{ input: string }` | `LinkSnapshot` | Run a user turn to settlement, reply with a snapshot. |
+| `abort` | — | `LinkSnapshot` | Cancel the in-flight turn, reply with a snapshot. |
+| `snapshot` | — | `LinkSnapshot` | Read the current state, projected to a snapshot. |
+| `resume` | `{ sessionId: string }` | `LinkSnapshot` | Restore a persisted session, reply with a snapshot. |
+| `listModels` | — | `ModelEntry[]` | List the model bound to the session (the active entry). |
+| `cycleModel` | `{ modelId: string }` | `LinkSnapshot` | Rotate the active model, reply with a snapshot. |
 
-With optional parent session tracking:
-```json
-{"type": "new_session", "parentSession": "/path/to/parent-session.jsonl"}
-```
+A `ModelEntry` is `{ id: string, active: boolean }`.
 
-Response:
-```json
-{"type": "response", "command": "new_session", "success": true, "data": {"cancelled": false}}
-```
+### submit
 
-If an extension cancelled:
-```json
-{"type": "response", "command": "new_session", "success": true, "data": {"cancelled": true}}
-```
-
-### State
-
-#### get_state
-
-Get current session state.
+Run one user turn to settlement. While the turn streams, the server pushes
+[signals](#signals); when the turn settles the request gets its correlated
+snapshot reply.
 
 ```json
-{"type": "get_state"}
+{"jsonrpc": "2.0", "id": "lnk-1", "method": "submit", "params": {"input": "List the files in src"}}
 ```
 
-Response:
-```json
-{
-  "type": "response",
-  "command": "get_state",
-  "success": true,
-  "data": {
-    "model": {...},
-    "thinkingLevel": "medium",
-    "isStreaming": false,
-    "isCompacting": false,
-    "steeringMode": "all",
-    "followUpMode": "one-at-a-time",
-    "sessionFile": "/path/to/session.jsonl",
-    "sessionId": "abc123",
-    "autoCompactionEnabled": true,
-    "messageCount": 5,
-    "pendingMessageCount": 0
-  }
-}
-```
+If a turn is already in flight, the conductor enqueues the input as a follow-up
+rather than dropping it, and `submit` resolves immediately with the current
+snapshot (see `SessionConductor.submit` in `src/conductor/contract.ts`).
 
-The `model` field is a full [Model](#model) object or `null`.
-
-#### get_messages
-
-Get all messages in the conversation.
+### abort
 
 ```json
-{"type": "get_messages"}
+{"jsonrpc": "2.0", "id": "lnk-2", "method": "abort"}
 ```
 
-Response:
-```json
-{
-  "type": "response",
-  "command": "get_messages",
-  "success": true,
-  "data": {"messages": [...]}
-}
-```
+Cancels the in-flight turn; an `aborted` fault signal is emitted and the reply
+carries the post-abort snapshot.
 
-Messages are `AgentMessage` objects (see [Message Types](#message-types)).
-
-### Model
-
-#### set_model
-
-Switch to a specific model.
+### resume
 
 ```json
-{"type": "set_model", "provider": "anthropic", "modelId": "claude-sonnet-4-20250514"}
+{"jsonrpc": "2.0", "id": "lnk-3", "method": "resume", "params": {"sessionId": "01J..."}}
 ```
 
-Response contains the full [Model](#model) object:
-```json
-{
-  "type": "response",
-  "command": "set_model",
-  "success": true,
-  "data": {...}
-}
-```
-
-#### cycle_model
-
-Cycle to the next available model. Returns `null` data if only one model available.
+### cycleModel
 
 ```json
-{"type": "cycle_model"}
+{"jsonrpc": "2.0", "id": "lnk-4", "method": "cycleModel", "params": {"modelId": "anthropic/claude-haiku-4-5"}}
 ```
 
-Response:
-```json
-{
-  "type": "response",
-  "command": "cycle_model",
-  "success": true,
-  "data": {
-    "model": {...},
-    "thinkingLevel": "medium",
-    "isScoped": false
-  }
-}
-```
-
-The `model` field is a full [Model](#model) object.
-
-#### get_available_models
-
-List all configured models.
-
-```json
-{"type": "get_available_models"}
-```
-
-Response contains an array of full [Model](#model) objects:
-```json
-{
-  "type": "response",
-  "command": "get_available_models",
-  "success": true,
-  "data": {
-    "models": [...]
-  }
-}
-```
-
-### Thinking
-
-#### set_thinking_level
-
-Set the reasoning/thinking level for models that support it.
-
-```json
-{"type": "set_thinking_level", "level": "high"}
-```
-
-Levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
-
-Note: `"xhigh"` is only supported by OpenAI codex-max models.
-
-Response:
-```json
-{"type": "response", "command": "set_thinking_level", "success": true}
-```
-
-#### cycle_thinking_level
-
-Cycle through available thinking levels. Returns `null` data if model doesn't support thinking.
-
-```json
-{"type": "cycle_thinking_level"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "cycle_thinking_level",
-  "success": true,
-  "data": {"level": "high"}
-}
-```
-
-### Queue Modes
-
-#### set_steering_mode
-
-Control how steering messages (from `steer`) are delivered.
-
-```json
-{"type": "set_steering_mode", "mode": "one-at-a-time"}
-```
-
-Modes:
-- `"all"`: Deliver all steering messages at the next interruption point
-- `"one-at-a-time"`: Deliver one steering message per interruption (default)
-
-Response:
-```json
-{"type": "response", "command": "set_steering_mode", "success": true}
-```
-
-#### set_follow_up_mode
-
-Control how follow-up messages (from `follow_up`) are delivered.
-
-```json
-{"type": "set_follow_up_mode", "mode": "one-at-a-time"}
-```
-
-Modes:
-- `"all"`: Deliver all follow-up messages when agent finishes
-- `"one-at-a-time"`: Deliver one follow-up message per agent completion (default)
-
-Response:
-```json
-{"type": "response", "command": "set_follow_up_mode", "success": true}
-```
-
-### Compaction
-
-#### compact
-
-Manually compact conversation context to reduce token usage.
-
-```json
-{"type": "compact"}
-```
-
-With custom instructions:
-```json
-{"type": "compact", "customInstructions": "Focus on code changes"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "compact",
-  "success": true,
-  "data": {
-    "summary": "Summary of conversation...",
-    "firstKeptEntryId": "abc123",
-    "tokensBefore": 150000,
-    "details": {}
-  }
-}
-```
-
-#### set_auto_compaction
-
-Enable or disable automatic compaction when context is nearly full.
-
-```json
-{"type": "set_auto_compaction", "enabled": true}
-```
-
-Response:
-```json
-{"type": "response", "command": "set_auto_compaction", "success": true}
-```
-
-### Retry
-
-#### set_auto_retry
-
-Enable or disable automatic retry on transient errors (overloaded, rate limit, 5xx).
-
-```json
-{"type": "set_auto_retry", "enabled": true}
-```
-
-Response:
-```json
-{"type": "response", "command": "set_auto_retry", "success": true}
-```
-
-#### abort_retry
-
-Abort an in-progress retry (cancel the delay and stop retrying).
-
-```json
-{"type": "abort_retry"}
-```
-
-Response:
-```json
-{"type": "response", "command": "abort_retry", "success": true}
-```
-
-### Bash
-
-#### bash
-
-Execute a shell command and add output to conversation context.
-
-```json
-{"type": "bash", "command": "ls -la"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "bash",
-  "success": true,
-  "data": {
-    "output": "total 48\ndrwxr-xr-x ...",
-    "exitCode": 0,
-    "cancelled": false,
-    "truncated": false
-  }
-}
-```
-
-If output was truncated, includes `fullOutputPath`:
-```json
-{
-  "type": "response",
-  "command": "bash",
-  "success": true,
-  "data": {
-    "output": "truncated output...",
-    "exitCode": 0,
-    "cancelled": false,
-    "truncated": true,
-    "fullOutputPath": "/tmp/indusagi-bash-abc123.log"
-  }
-}
-```
-
-**How bash results reach the LLM:**
-
-The `bash` command executes immediately and returns a `BashResult`. Internally, a `BashExecutionMessage` is created and stored in the agent's message state. This message does NOT emit an event.
-
-When the next `prompt` command is sent, all messages (including `BashExecutionMessage`) are transformed before being sent to the LLM. The `BashExecutionMessage` is converted to a `UserMessage` with this format:
-
-```
-Ran `ls -la`
-\`\`\`
-total 48
-drwxr-xr-x ...
-\`\`\`
-```
-
-This means:
-1. Bash output is included in the LLM context on the **next prompt**, not immediately
-2. Multiple bash commands can be executed before a prompt; all outputs will be included
-3. No event is emitted for the `BashExecutionMessage` itself
-
-#### abort_bash
-
-Abort a running bash command.
-
-```json
-{"type": "abort_bash"}
-```
-
-Response:
-```json
-{"type": "response", "command": "abort_bash", "success": true}
-```
-
-### Session
-
-#### get_session_stats
-
-Get token usage and cost statistics.
-
-```json
-{"type": "get_session_stats"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "get_session_stats",
-  "success": true,
-  "data": {
-    "sessionFile": "/path/to/session.jsonl",
-    "sessionId": "abc123",
-    "userMessages": 5,
-    "assistantMessages": 5,
-    "toolCalls": 12,
-    "toolResults": 12,
-    "totalMessages": 22,
-    "tokens": {
-      "input": 50000,
-      "output": 10000,
-      "cacheRead": 40000,
-      "cacheWrite": 5000,
-      "total": 105000
-    },
-    "cost": 0.45
-  }
-}
-```
-
-#### export_html
-
-Export session to an HTML file.
-
-```json
-{"type": "export_html"}
-```
-
-With custom path:
-```json
-{"type": "export_html", "outputPath": "/tmp/session.html"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "export_html",
-  "success": true,
-  "data": {"path": "/tmp/session.html"}
-}
-```
-
-#### switch_session
-
-Load a different session file. Can be cancelled by a `session_before_switch` extension event handler.
-
-```json
-{"type": "switch_session", "sessionPath": "/path/to/session.jsonl"}
-```
-
-Response:
-```json
-{"type": "response", "command": "switch_session", "success": true, "data": {"cancelled": false}}
-```
-
-If an extension cancelled the switch:
-```json
-{"type": "response", "command": "switch_session", "success": true, "data": {"cancelled": true}}
-```
-
-#### fork
-
-Create a new fork from a previous user message. Can be cancelled by a `session_before_fork` extension event handler. Returns the text of the message being forked from.
-
-```json
-{"type": "fork", "entryId": "abc123"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "fork",
-  "success": true,
-  "data": {"text": "The original prompt text...", "cancelled": false}
-}
-```
-
-If an extension cancelled the fork:
-```json
-{
-  "type": "response",
-  "command": "fork",
-  "success": true,
-  "data": {"text": "The original prompt text...", "cancelled": true}
-}
-```
-
-#### get_fork_messages
-
-Get user messages available for forking.
-
-```json
-{"type": "get_fork_messages"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "get_fork_messages",
-  "success": true,
-  "data": {
-    "messages": [
-      {"entryId": "abc123", "text": "First prompt..."},
-      {"entryId": "def456", "text": "Second prompt..."}
-    ]
-  }
-}
-```
-
-#### get_last_assistant_text
-
-Get the text content of the last assistant message.
-
-```json
-{"type": "get_last_assistant_text"}
-```
-
-Response:
-```json
-{
-  "type": "response",
-  "command": "get_last_assistant_text",
-  "success": true,
-  "data": {"text": "The assistant's response..."}
-}
-```
-
-Returns `{"text": null}` if no assistant messages exist.
-
-## Events
-
-Events are streamed to stdout as JSON lines during agent operation. Events do NOT include an `id` field (only responses do).
-
-### Event Types
-
-| Event | Description |
-|-------|-------------|
-| `agent_start` | Agent begins processing |
-| `agent_end` | Agent completes (includes all generated messages) |
-| `turn_start` | New turn begins |
-| `turn_end` | Turn completes (includes assistant message and tool results) |
-| `message_start` | Message begins |
-| `message_update` | Streaming update (text/thinking/toolcall deltas) |
-| `message_end` | Message completes |
-| `tool_execution_start` | Tool begins execution |
-| `tool_execution_update` | Tool execution progress (streaming output) |
-| `tool_execution_end` | Tool completes |
-| `auto_compaction_start` | Auto-compaction begins |
-| `auto_compaction_end` | Auto-compaction completes |
-| `auto_retry_start` | Auto-retry begins (after transient error) |
-| `auto_retry_end` | Auto-retry completes (success or final failure) |
-| `extension_error` | Extension threw an error |
-
-### agent_start
-
-Emitted when the agent begins processing a prompt.
-
-```json
-{"type": "agent_start"}
-```
-
-### agent_end
-
-Emitted when the agent completes. Contains all messages generated during this run.
+`cycleModel` on the conductor is optional, so a session assembly that does not
+support mid-session model changes leaves the bound model unchanged; the reply
+still carries the current snapshot.
+
+## Snapshots
+
+Every state-bearing op replies with a `LinkSnapshot` — a flat, serializable
+projection of the conductor's internal `ConductorState`, shaped for the wire
+(`projectSnapshot()` in `src/channels/session-ops.ts`):
 
 ```json
 {
-  "type": "agent_end",
-  "messages": [...]
+  "model": "anthropic/claude-sonnet-4-5",
+  "thinking": "off",
+  "streaming": false,
+  "condensing": false,
+  "faulted": false,
+  "sessionId": "01J...",
+  "sessionFile": "/path/to/--slug--/01J....ndjson",
+  "autoCondense": true,
+  "messageCount": 0,
+  "queuedCount": 0,
+  "usage": { "input": 100, "output": 50, "totalTokens": 150, "cost": 0.001 }
 }
 ```
 
-### turn_start / turn_end
+| Field | Meaning |
+|-------|---------|
+| `model` | Canonical id of the bound model. |
+| `thinking` | Active reasoning effort. |
+| `streaming` | An assistant turn is producing output (phase `streaming` or `tooling`). |
+| `condensing` | The transcript is being condensed (phase `condensing`). |
+| `faulted` | The most recent turn ended in a fault (phase `faulted`). |
+| `sessionId` | Stable identifier of the active session. |
+| `sessionFile` | On-disk transcript file (omitted when not persisted). |
+| `autoCondense` | Whether auto-condense is engaged. |
+| `messageCount` | Nodes on the active transcript branch. |
+| `queuedCount` | Inputs queued behind the in-flight turn. |
+| `usage` | Cumulative token / cost spend so far (framework `Usage`). |
 
-A turn consists of one assistant response plus any resulting tool calls and results.
+## Signals
 
-```json
-{"type": "turn_start"}
-```
-
-```json
-{
-  "type": "turn_end",
-  "message": {...},
-  "toolResults": [...]
-}
-```
-
-### message_start / message_end
-
-Emitted when a message begins and completes. The `message` field contains an `AgentMessage`.
-
-```json
-{"type": "message_start", "message": {...}}
-{"type": "message_end", "message": {...}}
-```
-
-### message_update (Streaming)
-
-Emitted during streaming of assistant messages. Contains both the partial message and a streaming delta event.
+As a turn progresses, the server streams uncorrelated **signal** frames (no
+`id`). Each wraps a `SessionSignal` from `src/conductor/contract.ts`:
 
 ```json
-{
-  "type": "message_update",
-  "message": {...},
-  "assistantMessageEvent": {
-    "type": "text_delta",
-    "contentIndex": 0,
-    "delta": "Hello ",
-    "partial": {...}
-  }
-}
+{"type": "signal", "name": "text", "body": {"kind": "text", "delta": "Hello"}}
 ```
 
-The `assistantMessageEvent` field contains one of these delta types:
+The `name` is the signal `kind`; the `body` is the verbatim signal. The signal
+kinds are:
 
-| Type | Description |
-|------|-------------|
-| `start` | Message generation started |
-| `text_start` | Text content block started |
-| `text_delta` | Text content chunk |
-| `text_end` | Text content block ended |
-| `thinking_start` | Thinking block started |
-| `thinking_delta` | Thinking content chunk |
-| `thinking_end` | Thinking block ended |
-| `toolcall_start` | Tool call started |
-| `toolcall_delta` | Tool call arguments chunk |
-| `toolcall_end` | Tool call ended (includes full `toolCall` object) |
-| `done` | Message complete (reason: `"stop"`, `"length"`, `"toolUse"`) |
-| `error` | Error occurred (reason: `"aborted"`, `"error"`) |
+| `name` | `body` fields | Meaning |
+|--------|---------------|---------|
+| `prompt` | `text` | The user turn was committed. |
+| `text` | `delta` | A chunk of assistant answer text. |
+| `thinking` | `delta` | A chunk of reasoning text. |
+| `tool_start` | `id`, `name` | A tool invocation began (correlate by `id`). |
+| `tool_end` | `id`, `ok` | A tool invocation finished (`ok` = no error). |
+| `turn_end` | `usage` | The assistant turn settled. |
+| `persisted` | `entryId` | The latest node was committed to the transcript. |
+| `compacted` | — | The transcript was condensed. |
+| `fault` | `fault` | A typed `ConductorFault` (`kind`, `message`, `cause?`). |
+| `queue` | `count` | The pending-input queue depth changed. |
+| `idle` | — | No in-flight work; ready for input. |
 
-Example streaming a text response:
-```json
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_start","contentIndex":0,"partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello","partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":" world","partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Hello world","partial":{...}}}
-```
+A client tells signals from replies by the `type: "signal"` discriminant — a
+reply has no `type` field and carries an `id` plus `result`/`error`.
 
-### tool_execution_start / tool_execution_update / tool_execution_end
+## Dialogs (ask / tell)
 
-Emitted when a tool begins, streams progress, and completes execution.
+When the agent (or an extension it hosts) needs interaction, the server emits a
+dialog frame (`src/channels/link/dialog.ts`):
 
-```json
-{
-  "type": "tool_execution_start",
-  "toolCallId": "call_abc123",
-  "toolName": "bash",
-  "args": {"command": "ls -la"}
-}
-```
+- **ask** — a blocking round-trip. The server suspends until a matching `answer`
+  arrives or the dialog deadline (`dialogMs`, default 90s) lapses, in which case
+  it resolves with a fallback.
 
-During execution, `tool_execution_update` events stream partial results (e.g., bash output as it arrives):
+  ```json
+  {"type": "ask", "id": "ask-1", "kind": "confirm", "payload": {"message": "Delete file?"}}
+  ```
 
-```json
-{
-  "type": "tool_execution_update",
-  "toolCallId": "call_abc123",
-  "toolName": "bash",
-  "args": {"command": "ls -la"},
-  "partialResult": {
-    "content": [{"type": "text", "text": "partial output so far..."}],
-    "details": {"truncation": null, "fullOutputPath": null}
-  }
-}
-```
+  Answer it by posting an `answer` frame with the same `id`:
 
-When complete:
+  ```json
+  {"type": "answer", "id": "ask-1", "value": true}
+  ```
 
-```json
-{
-  "type": "tool_execution_end",
-  "toolCallId": "call_abc123",
-  "toolName": "bash",
-  "result": {
-    "content": [{"type": "text", "text": "total 48\n..."}],
-    "details": {...}
-  },
-  "isError": false
-}
-```
+- **tell** — a one-way notice, no answer expected:
 
-Use `toolCallId` to correlate events. The `partialResult` in `tool_execution_update` contains the accumulated output so far (not just the delta), allowing clients to simply replace their display on each update.
+  ```json
+  {"type": "tell", "kind": "status", "payload": {"text": "Indexing..."}}
+  ```
 
-### auto_compaction_start / auto_compaction_end
+The interaction `kind` is one of the rows in `DIALOG_TABLE`: the round-trip kinds
+are `select`, `confirm`, `input`, `editor`; the fire-and-forget kinds are
+`notify`, `status`, `title`. A client that does not answer an `ask` lets it time
+out to its fallback (`null` for `select`/`input`/`editor`, `false` for
+`confirm`), so a non-interactive driver never wedges the server.
 
-Emitted when automatic compaction runs (when context is nearly full).
+## Error codes
 
-```json
-{"type": "auto_compaction_start", "reason": "threshold"}
-```
+The closed set of error codes (`OP_ERROR` in `src/channels/contract.ts`):
 
-The `reason` field is `"threshold"` (context getting large) or `"overflow"` (context exceeded limit).
+| Code | Name | Meaning |
+|------|------|---------|
+| `-32700` | parse | The framed line was not valid JSON. |
+| `-32600` | invalidRequest | The frame was not a well-formed request. |
+| `-32601` | unknownOp | No operation is registered under the `method`. |
+| `-32602` | invalidParams | The `params` failed the operation schema. |
+| `-32000` | handlerFailed | The operation handler threw. |
 
-```json
-{
-  "type": "auto_compaction_end",
-  "result": {
-    "summary": "Summary of conversation...",
-    "firstKeptEntryId": "abc123",
-    "tokensBefore": 150000,
-    "details": {}
-  },
-  "aborted": false,
-  "willRetry": false
-}
-```
-
-If `reason` was `"overflow"` and compaction succeeds, `willRetry` is `true` and the agent will automatically retry the prompt.
-
-If compaction was aborted, `result` is `null` and `aborted` is `true`.
-
-If compaction failed (e.g., API quota exceeded), `result` is `null`, `aborted` is `false`, and `errorMessage` contains the error description.
-
-### auto_retry_start / auto_retry_end
-
-Emitted when automatic retry is triggered after a transient error (overloaded, rate limit, 5xx).
-
-```json
-{
-  "type": "auto_retry_start",
-  "attempt": 1,
-  "maxAttempts": 3,
-  "delayMs": 2000,
-  "errorMessage": "529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}"
-}
-```
-
-```json
-{
-  "type": "auto_retry_end",
-  "success": true,
-  "attempt": 2
-}
-```
-
-On final failure (max retries exceeded):
-```json
-{
-  "type": "auto_retry_end",
-  "success": false,
-  "attempt": 3,
-  "finalError": "529 overloaded_error: Overloaded"
-}
-```
-
-### extension_error
-
-Emitted when an extension throws an error.
-
-```json
-{
-  "type": "extension_error",
-  "extensionPath": "/path/to/extension.ts",
-  "event": "tool_call",
-  "error": "Error message..."
-}
-```
-
-## Error Handling
-
-Failed commands return a response with `success: false`:
-
-```json
-{
-  "type": "response",
-  "command": "set_model",
-  "success": false,
-  "error": "Model not found: invalid/model"
-}
-```
-
-Parse errors:
-
-```json
-{
-  "type": "response",
-  "command": "parse",
-  "success": false,
-  "error": "Failed to parse command: Unexpected token..."
-}
-```
-
-## Types
-
-Source files:
-- [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `Model`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`
-- [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `AgentEvent`
-- [`src/core/messages.ts`](../src/core/messages.ts) - `BashExecutionMessage`
-- [`src/modes/rpc/rpc-types.ts`](../src/modes/rpc/rpc-types.ts) - RPC command/response types
-
-### Model
-
-```json
-{
-  "id": "claude-sonnet-4-20250514",
-  "name": "Claude Sonnet 4",
-  "api": "anthropic-messages",
-  "provider": "anthropic",
-  "baseUrl": "https://api.anthropic.com",
-  "reasoning": true,
-  "input": ["text", "image"],
-  "contextWindow": 200000,
-  "maxTokens": 16384,
-  "cost": {
-    "input": 3.0,
-    "output": 15.0,
-    "cacheRead": 0.3,
-    "cacheWrite": 3.75
-  }
-}
-```
-
-### UserMessage
-
-```json
-{
-  "role": "user",
-  "content": "Hello!",
-  "timestamp": 1733234567890,
-  "attachments": []
-}
-```
-
-The `content` field can be a string or an array of `TextContent`/`ImageContent` blocks.
-
-### AssistantMessage
-
-```json
-{
-  "role": "assistant",
-  "content": [
-    {"type": "text", "text": "Hello! How can I help?"},
-    {"type": "thinking", "thinking": "User is greeting me..."},
-    {"type": "toolCall", "id": "call_123", "name": "bash", "arguments": {"command": "ls"}}
-  ],
-  "api": "anthropic-messages",
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-20250514",
-  "usage": {
-    "input": 100,
-    "output": 50,
-    "cacheRead": 0,
-    "cacheWrite": 0,
-    "cost": {"input": 0.0003, "output": 0.00075, "cacheRead": 0, "cacheWrite": 0, "total": 0.00105}
-  },
-  "stopReason": "stop",
-  "timestamp": 1733234567890
-}
-```
-
-Stop reasons: `"stop"`, `"length"`, `"toolUse"`, `"error"`, `"aborted"`
-
-### ToolResultMessage
-
-```json
-{
-  "role": "toolResult",
-  "toolCallId": "call_123",
-  "toolName": "bash",
-  "content": [{"type": "text", "text": "total 48\ndrwxr-xr-x ..."}],
-  "isError": false,
-  "timestamp": 1733234567890
-}
-```
-
-### BashExecutionMessage
-
-Created by the `bash` RPC command (not by LLM tool calls):
-
-```json
-{
-  "role": "bashExecution",
-  "command": "ls -la",
-  "output": "total 48\ndrwxr-xr-x ...",
-  "exitCode": 0,
-  "cancelled": false,
-  "truncated": false,
-  "fullOutputPath": null,
-  "timestamp": 1733234567890
-}
-```
-
-### Attachment
-
-```json
-{
-  "id": "img1",
-  "type": "image",
-  "fileName": "photo.jpg",
-  "mimeType": "image/jpeg",
-  "size": 102400,
-  "content": "base64-encoded-data...",
-  "extractedText": null,
-  "preview": null
-}
-```
-
-## Example: Basic Client (Python)
+## Example client (Python)
 
 ```python
-import subprocess
-import json
+import subprocess, json, itertools
 
 proc = subprocess.Popen(
-    ["indusagi", "--mode", "rpc", "--no-session"],
+    ["indus", "--json"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
-    text=True
+    text=True,
 )
 
-def send(cmd):
-    proc.stdin.write(json.dumps(cmd) + "\n")
+ids = (f"lnk-{n}" for n in itertools.count(1))
+
+def send(method, params=None):
+    frame = {"jsonrpc": "2.0", "id": next(ids), "method": method}
+    if params is not None:
+        frame["params"] = params
+    proc.stdin.write(json.dumps(frame) + "\n")
     proc.stdin.flush()
 
-def read_events():
-    for line in proc.stdout:
-        yield json.loads(line)
+# Submit a prompt; the reply (a snapshot) arrives once the turn settles.
+send("submit", {"input": "List the files in src and summarise them"})
 
-# Send prompt
-send({"type": "prompt", "message": "Hello!"})
-
-# Process events
-for event in read_events():
-    if event.get("type") == "message_update":
-        delta = event.get("assistantMessageEvent", {})
-        if delta.get("type") == "text_delta":
-            print(delta["delta"], end="", flush=True)
-    
-    if event.get("type") == "agent_end":
-        print()
-        break
+for line in proc.stdout:
+    msg = json.loads(line)
+    if msg.get("type") == "signal":
+        if msg["name"] == "text":
+            print(msg["body"]["delta"], end="", flush=True)
+        elif msg["name"] == "idle":
+            print()
+            break
+    elif "result" in msg:
+        # A correlated reply to one of our requests (e.g. the submit snapshot).
+        pass
+    elif msg.get("type") == "ask":
+        # Answer a blocking dialog so the agent can proceed.
+        answer = {"type": "answer", "id": msg["id"], "value": None}
+        proc.stdin.write(json.dumps(answer) + "\n")
+        proc.stdin.flush()
 ```
 
-## Example: Interactive Client (Node.js)
-
-See [`test/rpc-example.ts`](../test/rpc-example.ts) for a complete interactive example, or [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts) for a typed client implementation.
-
-```javascript
-const { spawn } = require("child_process");
-const readline = require("readline");
-
-const agent = spawn("indusagi", ["--mode", "rpc", "--no-session"]);
-
-readline.createInterface({ input: agent.stdout }).on("line", (line) => {
-    const event = JSON.parse(line);
-    
-    if (event.type === "message_update") {
-        const { assistantMessageEvent } = event;
-        if (assistantMessageEvent.type === "text_delta") {
-            process.stdout.write(assistantMessageEvent.delta);
-        }
-    }
-});
-
-// Send prompt
-agent.stdin.write(JSON.stringify({ type: "prompt", message: "Hello" }) + "\n");
-
-// Abort on Ctrl+C
-process.on("SIGINT", () => {
-    agent.stdin.write(JSON.stringify({ type: "abort" }) + "\n");
-});
-```
+To build a typed client in-process, use `createLinkDriver` from the package
+barrel — see the [SDK](sdk.md). For one-shot scripting without the bidirectional
+protocol, use [print / JSON mode](json.md).

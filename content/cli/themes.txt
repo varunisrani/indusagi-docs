@@ -1,295 +1,164 @@
-> indusagi can create themes. Ask it to build one for your setup.
-
 # Themes
 
-Themes are JSON files that define colors for the TUI.
+> The console ships four built-in colour schemes. Switch between them in `/settings` — there are no theme files to write.
+
+The console's theme system is code-defined, not file-defined. Each scheme is built at module load from a small raw colour ramp, which is expanded into a closed set of semantic tokens and then projected onto the framework's colour adapter. There is no JSON theme format, no `~/.indusagi/.../themes/` directory, and no `--theme` flag — a scheme is selected by name and resolved against the shipped table.
+
+The theme engine lives in `src/console/theme`. The public barrel is `src/console/theme/index.ts`.
 
 ## Table of Contents
 
-- [Locations](#locations)
-- [Selecting a Theme](#selecting-a-theme)
-- [Creating a Custom Theme](#creating-a-custom-theme)
-- [Theme Format](#theme-format)
-- [Color Tokens](#color-tokens)
-- [Color Values](#color-values)
-- [Tips](#tips)
+- [The four schemes](#the-four-schemes)
+- [Selecting a scheme](#selecting-a-scheme)
+- [The pipeline](#the-pipeline)
+- [Palettes](#palettes)
+- [Semantic tokens](#semantic-tokens)
+- [Framework colour keys](#framework-colour-keys)
+- [Resolving a scheme](#resolving-a-scheme)
+- [Color-blind schemes](#color-blind-schemes)
 
-## Locations
+## The four schemes
 
-Indusagi loads themes from:
+Every scheme name is a `ThemeScheme` (`src/console/contract.ts`):
 
-- Built-in: `dark`, `light`
-- Global: `~/.indusagi/agent/themes/*.json`
-- Project: `.indusagi/themes/*.json`
-- Packages: `themes/` directories or `indusagi.themes` entries in `package.json`
-- Settings: `themes` array with files or directories
-- CLI: `--theme <path>` (repeatable)
+| Scheme | Label | For |
+|--------|-------|-----|
+| `midnight` | Midnight | dark terminals (the default) |
+| `daylight` | Daylight | light terminals |
+| `midnight-cb` | Midnight (color-blind) | deuteran-safe, dark |
+| `daylight-cb` | Daylight (color-blind) | deuteran-safe, light |
 
-Disable discovery with `--no-themes`.
+`DEFAULT_SCHEME` is `midnight`. These four are the complete shipped set; they are listed in this order by both the theme picker (`THEME_CHOICES` in `src/console/overlays/pickers.tsx`) and the `THEME_SCHEMES` table.
 
-## Selecting a Theme
+## Selecting a scheme
 
-Select a theme via `/settings` or in `settings.json`:
+The scheme is stored under the `colourScheme` preference. Its default value is the literal `"default"`, which is not a known scheme name and therefore resolves to `midnight` (see [Resolving a scheme](#resolving-a-scheme)).
 
-```json
-{
-  "theme": "my-theme"
-}
-```
-
-On first run, indusagi detects your terminal background and defaults to `dark` or `light`.
-
-## Creating a Custom Theme
-
-1. Create a theme file:
-
-```bash
-mkdir -p ~/.indusagi/agent/themes
-vim ~/.indusagi/agent/themes/my-theme.json
-```
-
-2. Define the theme with all required colors (see [Color Tokens](#color-tokens)):
+Set it from `settings.json`:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/badlogic/indusagi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
-  "name": "my-theme",
-  "vars": {
-    "primary": "#00aaff",
-    "secondary": 242
-  },
-  "colors": {
-    "accent": "primary",
-    "border": "primary",
-    "borderAccent": "#00ffff",
-    "borderMuted": "secondary",
-    "success": "#00ff00",
-    "error": "#ff0000",
-    "warning": "#ffff00",
-    "muted": "secondary",
-    "dim": 240,
-    "text": "",
-    "thinkingText": "secondary",
-    "selectedBg": "#2d2d30",
-    "userMessageBg": "#2d2d30",
-    "userMessageText": "",
-    "customMessageBg": "#2d2d30",
-    "customMessageText": "",
-    "customMessageLabel": "primary",
-    "toolPendingBg": "#1e1e2e",
-    "toolSuccessBg": "#1e2e1e",
-    "toolErrorBg": "#2e1e1e",
-    "toolTitle": "primary",
-    "toolOutput": "",
-    "mdHeading": "#ffaa00",
-    "mdLink": "primary",
-    "mdLinkUrl": "secondary",
-    "mdCode": "#00ffff",
-    "mdCodeBlock": "",
-    "mdCodeBlockBorder": "secondary",
-    "mdQuote": "secondary",
-    "mdQuoteBorder": "secondary",
-    "mdHr": "secondary",
-    "mdListBullet": "#00ffff",
-    "toolDiffAdded": "#00ff00",
-    "toolDiffRemoved": "#ff0000",
-    "toolDiffContext": "secondary",
-    "syntaxComment": "secondary",
-    "syntaxKeyword": "primary",
-    "syntaxFunction": "#00aaff",
-    "syntaxVariable": "#ffaa00",
-    "syntaxString": "#00ff00",
-    "syntaxNumber": "#ff00ff",
-    "syntaxType": "#00aaff",
-    "syntaxOperator": "primary",
-    "syntaxPunctuation": "secondary",
-    "thinkingOff": "secondary",
-    "thinkingMinimal": "primary",
-    "thinkingLow": "#00aaff",
-    "thinkingMedium": "#00ffff",
-    "thinkingHigh": "#ff00ff",
-    "thinkingXhigh": "#ff0000",
-    "bashMode": "#ffaa00"
-  }
+  "colourScheme": "daylight"
 }
 ```
 
-3. Select the theme via `/settings`.
+Or change it interactively in the **Settings** overlay (`/settings` → "Colour scheme"). Writing the value there persists it immediately and re-themes the live surface.
 
-**Hot reload:** When you edit the currently active custom theme file, indusagi reloads it automatically for immediate visual feedback.
+The console also defines a dedicated colour-scheme picker (the `theme` modal, rendered by `ThemePicker` in `src/console/overlays/pickers.tsx` via the framework `ThemeDialog`). In this build the picker has no opener wired — no slash command and no keybinding raises the `theme` modal — so the **Settings** overlay above is the reachable way to switch schemes. When the `theme` modal is raised, its semantics are:
 
-## Theme Format
+- **Enter** — commit: dispatch `scheme:set` to re-theme the live surface *and* persist `colourScheme`.
+- **Esc / cancel** — close the picker, reverting to the scheme that was on screen when it opened.
 
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/badlogic/indusagi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
-  "name": "my-theme",
-  "vars": {
-    "blue": "#0066cc",
-    "gray": 242
-  },
-  "colors": {
-    "accent": "blue",
-    "muted": "gray",
-    "text": "",
-    ...
-  }
+The picker captures the opening scheme as a revert target, but it does not wire the framework dialog's optional `onHighlight` callback, so moving the highlight does **not** live-preview a scheme — nothing changes until Enter commits.
+
+## The pipeline
+
+A scheme is assembled once at module load (`src/console/theme/resolve.ts`):
+
+```
+palette  ──deriveTokens──▶  tokens  ──themeAdapter──▶  framework adapter
+   └──────────────────────────┴───────────────────────────┘
+                       ConsoleTheme
+```
+
+A `ConsoleTheme` carries the `scheme` name, the raw `palette`, the derived `tokens`, and the framework `adapter` the components render against. The heavy work (building the chalk-backed adapter) happens at load time, so the render path only ever reads an already-built theme.
+
+## Palettes
+
+A `ThemePalette` (`src/console/theme/palette.ts`) is the raw nine-stop ramp a scheme is built from: three accent hues (a cool primary, a warm secondary, a muted-support tertiary), a three-stop neutral text gradient (`ink`/`body`/`muted`), and three status hues (`affirm`/`caution`/`alarm`).
+
+```typescript
+export interface ThemePalette {
+  primary: string;    // cool accent (focus, selection, headings)
+  secondary: string;  // warm accent (composer tint, card gutters)
+  tertiary: string;   // muted-support accent (borders, info, types)
+  ink: string;        // high-contrast text on an accent
+  body: string;       // default answer foreground
+  muted: string;      // timestamps, hints, metadata
+  affirm: string;     // success
+  caution: string;    // warning
+  alarm: string;      // error / fault
 }
 ```
 
-- `name` is required and must be unique.
-- `vars` is optional. Define reusable colors here, then reference them in `colors`.
-- `colors` must define all 51 required tokens.
+The two base ramps are `MIDNIGHT_PALETTE` and `DAYLIGHT_PALETTE`; `PALETTES` maps every `ThemeScheme` to its ramp. Every colour the console renders is computed from these stops — no module downstream of the palette writes a literal hex.
 
-The `$schema` field enables editor auto-completion and validation.
+## Semantic tokens
 
-## Color Tokens
+`deriveTokens` (`src/console/theme/tokens.ts`) expands a palette into the `ThemeTokens` the console body actually names. The console never names a hex or a palette stop; it names a *role*. The mapping is pure and total — every token key is assigned exactly once.
 
-Every theme must define all 51 color tokens. There are no optional colors.
+Core roles:
 
-### Core UI (11 colors)
+| Token | ← palette stop | Purpose |
+|-------|----------------|---------|
+| `signal` | `primary` | dominant accent (focus, selection) |
+| `frame` | `tertiary` | default structural borders |
+| `quietFrame` | `muted` | de-emphasised separators |
+| `promptSurface` | `secondary` | composer's active tint |
+| `cardAccent` | `secondary` | row gutters and headers |
+| `bodyText` | `body` | default answer foreground |
+| `mutedText` | `muted` | timestamps, hints, metadata |
+| `inkText` | `ink` | high-contrast text on an accent |
+| `notice` | `tertiary` | informational tone |
+| `affirm` | `affirm` | success tone |
+| `caution` | `caution` | warning tone |
+| `alarm` | `alarm` | error / fault tone |
+| `pending` | `primary` | busy / in-flight tone |
 
-| Token | Purpose |
-|-------|---------|
-| `accent` | Primary accent (logo, selected items, cursor) |
-| `border` | Normal borders |
-| `borderAccent` | Highlighted borders |
-| `borderMuted` | Subtle borders (editor) |
-| `success` | Success states |
-| `error` | Error states |
-| `warning` | Warning states |
-| `muted` | Secondary text |
-| `dim` | Tertiary text |
-| `text` | Default text (usually `""`) |
-| `thinkingText` | Thinking block text |
+Rich-render roles (markdown / diff / syntax) are derived from the same nine stops so styled transcripts, colored diffs, and fenced code recolour with the scheme:
 
-### Backgrounds & Content (11 colors)
+| Token | ← derived from | Purpose |
+|-------|----------------|---------|
+| `codeInline` | `primary` | inline code accent |
+| `heading` | `primary` | heading accent |
+| `blockquoteBar` | `muted` | dim quote bar |
+| `diffAddedBg` | `affirm` blended toward the bg | added-line tint |
+| `diffRemovedBg` | `alarm` blended toward the bg | removed-line tint |
+| `diffAddedText` | `affirm` | added foreground / `+` |
+| `diffRemovedText` | `alarm` | removed foreground / `-` |
+| `synKeyword` | `primary` | keywords |
+| `synString` | `affirm` | strings |
+| `synNumber` | `caution` | numbers |
+| `synComment` | `muted` | comments |
+| `synType` | `tertiary` | types / classes |
 
-| Token | Purpose |
-|-------|---------|
-| `selectedBg` | Selected line background |
-| `userMessageBg` | User message background |
-| `userMessageText` | User message text |
-| `customMessageBg` | Extension message background |
-| `customMessageText` | Extension message text |
-| `customMessageLabel` | Extension message label |
-| `toolPendingBg` | Tool box (pending) |
-| `toolSuccessBg` | Tool box (success) |
-| `toolErrorBg` | Tool box (error) |
-| `toolTitle` | Tool title |
-| `toolOutput` | Tool output text |
+The two diff backgrounds are computed by blending the status hue ~22% over the scheme's implied terminal background (toward black on a dark scheme, toward white on a light one), so every scheme — including the color-blind variants — gets a legible `+`/`-` tint that tracks its own success/alarm hue.
 
-### Markdown (10 colors)
+## Framework colour keys
 
-| Token | Purpose |
-|-------|---------|
-| `mdHeading` | Headings |
-| `mdLink` | Link text |
-| `mdLinkUrl` | Link URL |
-| `mdCode` | Inline code |
-| `mdCodeBlock` | Code block content |
-| `mdCodeBlockBorder` | Code block fences |
-| `mdQuote` | Blockquote text |
-| `mdQuoteBorder` | Blockquote border |
-| `mdHr` | Horizontal rule |
-| `mdListBullet` | List bullets |
+The framework's `InkThemeAdapter` looks colours up by *its own* key vocabulary. `frameworkColors` (`src/console/theme/adapter.ts`) is the one place each framework key is filled from a console token, and `themeAdapter` hands the resulting record to `createThemeAdapter` from `indusagi/react-ink`:
 
-### Tool Diffs (3 colors)
+| Framework key | ← console token |
+|---------------|-----------------|
+| `text` | `bodyText` |
+| `dim` | `mutedText` |
+| `muted` | `mutedText` |
+| `accent` | `signal` |
+| `borderMuted` | `quietFrame` |
+| `bashBorder` | `frame` |
+| `userMessage` | `promptSurface` |
+| `customMessage` | `cardAccent` |
+| `success` | `affirm` |
+| `warning` | `caution` |
+| `error` | `alarm` |
+| `info` | `notice` |
+| `highlight` | `inkText` |
 
-| Token | Purpose |
-|-------|---------|
-| `toolDiffAdded` | Added lines |
-| `toolDiffRemoved` | Removed lines |
-| `toolDiffContext` | Context lines |
+The markdown/diff/syntax role keys (`codeInline`, `heading`, `blockquoteBar`, `diffAddedBg`, `diffRemovedBg`, `diffAddedText`, `diffRemovedText`, `synKeyword`, `synString`, `synNumber`, `synComment`, `synType`) carry through under the same names so the framework's rich-render path resolves them straight from the derived tokens.
 
-### Syntax Highlighting (9 colors)
+## Resolving a scheme
 
-| Token | Purpose |
-|-------|---------|
-| `syntaxComment` | Comments |
-| `syntaxKeyword` | Keywords |
-| `syntaxFunction` | Function names |
-| `syntaxVariable` | Variables |
-| `syntaxString` | Strings |
-| `syntaxNumber` | Numbers |
-| `syntaxType` | Types |
-| `syntaxOperator` | Operators |
-| `syntaxPunctuation` | Punctuation |
+`resolveTheme` (`src/console/theme/resolve.ts`) is the single sanctioned way to turn a scheme name into a `ConsoleTheme`:
 
-### Thinking Level Borders (6 colors)
+```typescript
+import { resolveTheme, THEME_SCHEMES, isThemeScheme } from "src/console";
 
-Editor border colors indicating thinking level (visual hierarchy from subtle to prominent):
-
-| Token | Purpose |
-|-------|---------|
-| `thinkingOff` | Thinking off |
-| `thinkingMinimal` | Minimal thinking |
-| `thinkingLow` | Low thinking |
-| `thinkingMedium` | Medium thinking |
-| `thinkingHigh` | High thinking |
-| `thinkingXhigh` | Extra high thinking |
-
-### Bash Mode (1 color)
-
-| Token | Purpose |
-|-------|---------|
-| `bashMode` | Editor border in bash mode (`!` prefix) |
-
-### HTML Export (optional)
-
-The `export` section controls colors for `/export` HTML output. If omitted, colors are derived from `userMessageBg`.
-
-```json
-{
-  "export": {
-    "pageBg": "#18181e",
-    "cardBg": "#1e1e24",
-    "infoBg": "#3c3728"
-  }
-}
+const theme = resolveTheme("daylight");   // → the daylight ConsoleTheme
+const fallback = resolveTheme("nonsense"); // → the midnight (default) ConsoleTheme
 ```
 
-## Color Values
+An unrecognised or absent name falls back to `DEFAULT_SCHEME` rather than throwing, so a corrupt `colourScheme` preference never blanks the console. `isThemeScheme(value)` narrows an arbitrary string to a known scheme; `THEME_SCHEMES` is the picker-ordered list of every scheme.
 
-Four formats are supported:
+## Color-blind schemes
 
-| Format | Example | Description |
-|--------|---------|-------------|
-| Hex | `"#ff0000"` | 6-digit hex RGB |
-| 256-color | `39` | xterm 256-color palette index (0-255) |
-| Variable | `"primary"` | Reference to a `vars` entry |
-| Default | `""` | Terminal's default color |
-
-### 256-Color Palette
-
-- `0-15`: Basic ANSI colors (terminal-dependent)
-- `16-231`: 6×6×6 RGB cube (`16 + 36×R + 6×G + B` where R,G,B are 0-5)
-- `232-255`: Grayscale ramp
-
-### Terminal Compatibility
-
-Indusagi uses 24-bit RGB colors. Most modern terminals support this (iTerm2, Kitty, WezTerm, Windows Terminal, VS Code). For older terminals with only 256-color support, indusagi falls back to the nearest approximation.
-
-Check truecolor support:
-
-```bash
-echo $COLORTERM  # Should output "truecolor" or "24bit"
-```
-
-## Tips
-
-**Dark terminals:** Use bright, saturated colors with higher contrast.
-
-**Light terminals:** Use darker, muted colors with lower contrast.
-
-**Color harmony:** Start with a base palette (Nord, Gruvbox, Tokyo Night), define it in `vars`, and reference consistently.
-
-**Testing:** Check your theme with different message types, tool states, markdown content, and long wrapped text.
-
-**VS Code:** Set `terminal.integrated.minimumContrastRatio` to `1` for accurate colors.
-
-## Examples
-
-See the built-in themes:
-- [dark.json](../src/modes/interactive/theme/dark.json)
-- [light.json](../src/modes/interactive/theme/light.json)
+`midnight-cb` and `daylight-cb` clone their base ramps but re-derive the three *status* hues so a red-green color-blind user can tell success from failure without relying on the red-green axis. Success moves off green onto a vivid blue, the red alarm is deepened, and the amber warning is nudged in lightness — so the three status tones separate by *lightness*, not hue alone. The accent hues and neutral gradient carry over unchanged, so the overall look stays the parent scheme.

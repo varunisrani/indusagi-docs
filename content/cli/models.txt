@@ -1,193 +1,108 @@
 # Custom Models
 
-Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.indusagi/agent/models.json`.
+The set of models indusagi can use comes from the bundled `indusagi` framework registry. This page covers how to inspect that catalog, narrow which models appear in the picker, select one for a run, and register a model programmatically.
 
 ## Table of Contents
 
-- [Basic Example](#basic-example)
+- [Listing Models](#listing-models)
+- [Selecting a Model](#selecting-a-model)
+- [Narrowing the Picker](#narrowing-the-picker)
 - [Supported APIs](#supported-apis)
-- [Provider Configuration](#provider-configuration)
-- [Model Configuration](#model-configuration)
-- [Overriding Built-in Providers](#overriding-built-in-providers)
-- [OpenAI Compatibility](#openai-compatibility)
+- [Registering a Model Programmatically](#registering-a-model-programmatically)
+- [Model Shape](#model-shape)
 
-## Basic Example
+## Listing Models
+
+`--list-models` prints the full catalog as an aligned table — provider, model id, context window, max output, whether it supports reasoning, and whether it accepts images. An optional substring filters the rows:
+
+```bash
+indus --list-models
+indus --list-models claude        # only rows whose provider/model id contains "claude"
+```
+
+The catalog is sourced from `getProviders()` / `getModels()` in `indusagi/ai`. The framework's in-process `mock` provider (one model, `mock-default`) is filtered out of the interactive model catalog, so it is never the auto-selected default and never appears in the `/model` picker. It is not filtered from `--list-models`, which prints the raw framework registry, so `mock-default` can show up there.
+
+## Selecting a Model
+
+Pick a model for a run with `--model` (alias `-m`). It accepts a provider-qualified id or a bare id when that id is unambiguous across providers:
+
+```bash
+indus --model anthropic/claude-sonnet-4-20250514
+indus -m claude-sonnet-4-20250514
+```
+
+With no `--model`, the agent chooses a default model belonging to the first provider you are authenticated with. Inside an interactive session, `/model` (alias `/models`) opens the picker.
+
+## Narrowing the Picker
+
+The `enabledModels` setting restricts which models the picker offers. It is a list of glob / id patterns; an empty list (the default) means every model is offered.
 
 ```json
 {
-  "providers": {
-    "ollama": {
-      "baseUrl": "http://localhost:11434/v1",
-      "api": "openai-completions",
-      "models": [
-        {
-          "id": "llama-3.1-8b",
-          "name": "Llama 3.1 8B (Local)",
-          "contextWindow": 128000,
-          "maxTokens": 32000
-        }
-      ]
-    }
-  }
+  "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"]
 }
 ```
 
-The file reloads each time you open `/model`. Edit during session; no restart needed.
+See [Settings](settings.md).
 
 ## Supported APIs
 
+Each model declares the streaming `api` its provider speaks. The framework wires up these built-in API adapters:
+
 | API | Description |
 |-----|-------------|
-| `openai-completions` | OpenAI Chat Completions (most compatible) |
-| `openai-responses` | OpenAI Responses API |
 | `anthropic-messages` | Anthropic Messages API |
+| `openai-completions` | OpenAI Chat Completions API (most compatible) |
+| `openai-responses` | OpenAI Responses API |
+| `azure-openai-responses` | Azure OpenAI Responses API |
+| `openai-codex-responses` | OpenAI Codex Responses API |
 | `google-generative-ai` | Google Generative AI |
+| `google-vertex` | Google Vertex AI |
+| `bedrock-converse-stream` | Amazon Bedrock Converse API |
+| `kimi-openai-compatible` | Kimi (Moonshot) OpenAI-compatible API |
+| `nvidia-openai-compatible` | NVIDIA OpenAI-compatible API |
+| `mock-ai` | In-process echo provider (tests only) |
 
-Set `api` at provider level (default for all models) or model level (override per model).
+## Registering a Model Programmatically
 
-## Provider Configuration
+To add a model that the bundled catalog does not ship, use the framework `ModelRegistry`. It exposes `registerCustomModel(model)` to add one model and `loadCustomModels(models)` to add several. A registered model becomes visible to `getModels()` for its provider, so it shows up in `--list-models` and the picker.
 
-| Field | Description |
-|-------|-------------|
-| `baseUrl` | API endpoint URL |
-| `api` | API type (see above) |
-| `apiKey` | API key (see value resolution below) |
-| `headers` | Custom headers (see value resolution below) |
-| `authHeader` | Set `true` to add `Authorization: Bearer <apiKey>` automatically |
-| `models` | Array of model configurations |
+```ts
+import { ModelRegistry } from "indusagi/ai";
 
-### Value Resolution
+const registry = new ModelRegistry();
 
-The `apiKey` and `headers` fields support three formats:
-
-- **Shell command:** `"!command"` executes and uses stdout
-  ```json
-  "apiKey": "!security find-generic-password -ws 'anthropic'"
-  "apiKey": "!op read 'op://vault/item/credential'"
-  ```
-- **Environment variable:** Uses the value of the named variable
-  ```json
-  "apiKey": "MY_AINDUSAGI_KEY"
-  ```
-- **Literal value:** Used directly
-  ```json
-  "apiKey": "sk-..."
-  ```
-
-### Custom Headers
-
-```json
-{
-  "providers": {
-    "custom-proxy": {
-      "baseUrl": "https://proxy.example.com/v1",
-      "apiKey": "MY_AINDUSAGI_KEY",
-      "api": "anthropic-messages",
-      "headers": {
-        "x-portkey-api-key": "PORTKEY_AINDUSAGI_KEY",
-        "x-secret": "!op read 'op://vault/item/secret'"
-      },
-      "models": [...]
-    }
-  }
-}
+registry.registerCustomModel({
+  id: "my-local-llama",
+  name: "Llama 3.1 8B (Local)",
+  api: "openai-completions",
+  provider: "ollama",
+  baseUrl: "http://localhost:11434/v1",
+  reasoning: false,
+  input: ["text"],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 128000,
+  maxTokens: 32000,
+});
 ```
 
-## Model Configuration
+For routing an existing provider through a proxy, or implementing a non-standard streaming API, see [Custom Providers](custom-provider.md).
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `id` | Yes | Model identifier |
-| `name` | No | Display name |
-| `api` | No | Override provider's API for this model |
-| `contextWindow` | No | Context window size in tokens |
-| `maxTokens` | No | Maximum output tokens |
-| `reasoning` | No | Supports extended thinking |
-| `input` | No | Input types: `["text"]` or `["text", "image"]` |
-| `cost` | No | `{"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}` |
+## Model Shape
 
-## Overriding Built-in Providers
+A model is the framework `Model` record (from `indusagi/ai`):
 
-Route a built-in provider through a proxy without redefining models:
-
-```json
-{
-  "providers": {
-    "anthropic": {
-      "baseUrl": "https://my-proxy.example.com/v1"
-    }
-  }
-}
-```
-
-All built-in Anthropic models remain available. Existing OAuth or API key auth continues to work.
-
-To fully replace a built-in provider with custom models, include the `models` array:
-
-```json
-{
-  "providers": {
-    "anthropic": {
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "ANTHROPIC_AINDUSAGI_KEY",
-      "api": "anthropic-messages",
-      "models": [...]
-    }
-  }
-}
-```
-
-## OpenAI Compatibility
-
-For providers with partial OpenAI compatibility, use the `compat` field:
-
-```json
-{
-  "providers": {
-    "local-llm": {
-      "baseUrl": "http://localhost:8080/v1",
-      "api": "openai-completions",
-      "compat": {
-        "supportsUsageInStreaming": false,
-        "maxTokensField": "max_tokens"
-      },
-      "models": [...]
-    }
-  }
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `supportsStore` | Provider supports `store` field |
-| `supportsDeveloperRole` | Use `developer` vs `system` role |
-| `supportsReasoningEffort` | Support for `reasoning_effort` parameter |
-| `supportsUsageInStreaming` | Supports `stream_options: { include_usage: true }` (default: `true`) |
-| `maxTokensField` | Use `max_completion_tokens` or `max_tokens` |
-| `openRouterRouting` | OpenRouter routing config passed to OpenRouter for model/provider selection |
-
-Example:
-
-```json
-{
-  "providers": {
-    "openrouter": {
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "apiKey": "OPENROUTER_AINDUSAGI_KEY",
-      "api": "openai-completions",
-      "models": [
-        {
-          "id": "openrouter/anthropic/claude-3.5-sonnet",
-          "name": "OpenRouter Claude 3.5 Sonnet",
-          "compat": {
-            "openRouterRouting": {
-              "order": ["anthropic"],
-              "fallbacks": ["openai"]
-            }
-          }
-        }
-      ]
-    }
-  }
-}
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Model identifier (e.g. `"claude-sonnet-4-20250514"`) |
+| `name` | string | Display name |
+| `api` | string | Streaming API the provider speaks (see above) |
+| `provider` | string | Owning provider id |
+| `baseUrl` | string | API endpoint URL |
+| `reasoning` | boolean | Whether the model supports extended thinking |
+| `input` | `("text" \| "image")[]` | Supported input types |
+| `cost` | object | `{ input, output, cacheRead, cacheWrite }`, $ per million tokens |
+| `contextWindow` | number | Context window size in tokens |
+| `maxTokens` | number | Maximum output tokens |
+| `headers` | object | Optional custom request headers |
+| `compat` | object | Optional OpenAI-compatibility quirks (for `openai-completions` / `openai-responses`) |

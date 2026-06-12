@@ -1,45 +1,72 @@
 # AI Utilities
 
-Utility helpers live in `indusagi/src/ai/utils` and are re-exported from `indusagi/ai`.
+Utility helpers live in `src/facade/ml/kit/*` and are re-exported from
+`indusagi/ai`.
 
 ## Event Streams
 
-File: `indusagi/src/ai/utils/event-stream.ts`
+File: `src/facade/ml/kit/event-stream.ts`
 
-- `EventStream<T, R>` is a generic async iterable with `push` and `result()`.
-- `AssistantMessageEventStream` is specialized for assistant message events.
-- `createAssistantMessageEventStream()` creates a new stream instance.
+- `EventStream<T, R>` is a generic producer/consumer async iterable with `push`,
+  `end`, `error`, `result()`, `resultWithTimeout(ms)`, `filter`, `map`, and
+  `getHistory()`.
+- `AssistantMessageEventStream` specializes it for assistant message events and
+  adds typed push helpers (`pushStart`, `pushTextDelta`, `pushToolCallEnd`,
+  `pushDone`, `pushError`, ...). It settles its result on the first `done` or
+  `error` event.
+- `createAssistantMessageEventStream(options?)` creates a new instance.
 
 ## JSON Parsing for Tool Calls
 
-File: `indusagi/src/ai/utils/json-parse.ts`
+File: `src/facade/ml/kit/json-parse.ts`
 
-`parseStreamingJson(partialJson)` tolerates incomplete JSON and returns a best-effort object.
-It uses `partial-json` as a fallback.
+- `parseStreamingJson(partialJson, options?)` tolerates incomplete JSON and
+  returns a best-effort value. It tries a strict `JSON.parse`, then the
+  `partial-json` parser, and finally a configurable fallback.
+- `parseStreamingJsonWithDiagnostics(partialJson, options?)` returns the same
+  value plus `{ parsed, ok, usedPartialParser, error? }` diagnostics.
 
 ## Unicode Sanitization
 
-File: `indusagi/src/ai/utils/sanitize-unicode.ts`
+File: `src/facade/ml/kit/sanitize-unicode.ts`
 
-`sanitizeSurrogates(text)` removes unpaired Unicode surrogate characters.
-This prevents JSON serialization errors in provider SDKs.
+- `sanitizeSurrogates(text)` removes unpaired UTF-16 surrogate code units so a
+  string is well-formed before JSON encoding (which many provider SDKs require).
+- `sanitizeUnknownUnicode(value)` walks an arbitrary value and applies the same
+  cleanup to every nested string.
 
 ## Overflow Detection
 
-File: `indusagi/src/ai/utils/overflow.ts`
+File: `src/facade/ml/kit/overflow.ts`
 
-`isContextOverflow(message, contextWindow?)` detects context window errors.
-It checks provider-specific error patterns and can detect silent overflow when `usage.input` exceeds `contextWindow`.
+- `isContextOverflow(message, contextWindow?)` returns `true` when an
+  `AssistantMessage` carries a context-overflow error, or (when `contextWindow`
+  is given) when `usage.input + usage.cacheRead` exceeds the window on an
+  otherwise-successful stop.
+- `getOverflowPatterns()` returns the regexes used to recognize overflow errors.
+- `getOverflowSuggestion(errorMessage?)` returns remediation advice for a matched
+  error (or for a bare overflow-like HTTP status with no body).
 
 ## TypeBox Helpers
 
-File: `indusagi/src/ai/utils/typebox-helpers.ts`
+File: `src/facade/ml/kit/typebox-helpers.ts`
 
-`StringEnum(values, options?)` creates a string enum schema compatible with providers that do not accept `anyOf` or `const`.
+- `StringEnum(values, options?)` builds a TypeBox schema in the plain
+  `{ type: "string", enum: [...] }` shape, which providers (notably Google) accept
+  where the richer `anyOf`/`const` output would be rejected.
+- `normalizeSchemaForValidation(schema)` returns a plain-object clone of a schema
+  suitable for the validator compiler.
 
 ## Tool Validation
 
-File: `indusagi/src/ai/utils/validation.ts`
+File: `src/facade/ml/kit/validation.ts`
 
-`validateToolArguments(tool, toolCall)` and `validateToolCall(tools, toolCall)` use AJV to validate tool call arguments.
-Validation is disabled in strict CSP environments like browser extensions.
+- `validateToolArguments(tool, toolCall)` validates a tool call's arguments
+  against the tool's schema using AJV, returning the (possibly coerced) arguments
+  or throwing a human-readable error.
+- `validateToolCall(tools, toolCall)` looks up the tool by name, then validates.
+- `getValidationDiagnostics()` reports `{ cacheSize, ajvEnabled, isBrowserExtension }`.
+
+Validation is automatically disabled in runtimes that forbid dynamic code
+generation (for example, an extension page under a strict Content-Security-Policy);
+in that case the arguments pass through unvalidated.

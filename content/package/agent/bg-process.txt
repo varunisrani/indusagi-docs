@@ -1,351 +1,199 @@
-> Manage background processes without blocking your workflow. Start dev servers, builds, and tests in the background while continuing to code.
+# Background Process Tool
 
-# @indusagi/bg-process
+> Run long-running commands without blocking the agent. Start dev servers, builds, and tests in the background, monitor their output, get alerts on completion, and manage them all from one tool.
 
-The `@indusagi/bg-process` extension provides complete background process management for indusagi. Run long-running commands, monitor their output, get alerts on completion, and manage them all from your AI agent.
+Background process management ships as the built-in `process` tool of `indusagi/agent`. It lives in `src/facade/bot/actions/` and is part of `codingTools` / `createCodingTools`. There is no separate extension to install and no `/process:*` slash commands — everything is driven through the single `process` tool.
 
-**Key Features:**
--  Start processes in background without blocking
--  List and monitor all running processes
-- [Notes] Stream or fetch process output on demand
--  Smart alerts (on success, failure, crash, kill)
-- 🧹 Auto-cleanup when session ends
-- [Files] File-based logging (no memory overhead)
-- [Interactive] Interactive CLI with full keyboard control
+Implementation:
 
-## Installation
-
-### Via Package Manager
-
-```bash
-npm install @indusagi/bg-process
-```
-
-### Via CLI
-
-```bash
-indusagi install npm:@indusagi/bg-process
-```
-
-### Development
-
-```bash
-git clone <repo>
-cd indusagi-bg-tool
-npm install
-indusagi -e ./src/index.ts
-```
-
-## Quick Start
-
-Load the extension:
-
-```bash
-indusagi -e @indusagi/bg-process
-```
-
-Or with the full path:
-
-```bash
-indusagi -e node_modules/@indusagi/bg-process/src/index.ts
-```
-
-Start using the `process` tool in your agent:
-
-```
-Start a background dev server named "backend" running "npm run dev"
-```
+- `actions/process.ts` — the `process` `AgentTool` (`createProcessTool`) and its action dispatch.
+- `actions/process-controller.ts` — `ProcessController` plus the per-cwd `getProcessController` cache.
+- `actions/process-manager.ts` — `ProcessManager`, the spawn/log/kill engine.
+- `actions/process-types.ts` — `ProcessInfo`, `ProcessStatus`, `StartOptions`, `ProcessesDetails`, and related types.
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
-- [Tool: process](#tool-process)
-  - [Actions](#actions)
-  - [Examples](#examples)
-  - [Alert Parameters](#alert-parameters)
-- [Commands](#commands)
-  - [/process:list](#processlist)
-  - [/process:stream](#processstream)
-  - [/process:logs](#processlogs)
-  - [/process:kill](#processkill)
-  - [/process:clear](#processclear)
-- [Usage Patterns](#usage-patterns)
+- [Setup](#setup)
+- [Tool Parameters](#tool-parameters)
+- [Actions](#actions)
+- [Alert Flags](#alert-flags)
+- [Examples](#examples)
 - [Process Lifecycle](#process-lifecycle)
 - [Output Storage](#output-storage)
-- [Performance](#performance)
-- [Platform Support](#platform-support)
+- [Controller and Manager](#controller-and-manager)
 
-## Tool: process
+## Setup
 
-The agent can use the `process` tool directly with these actions:
+```typescript
+import { Agent, createCodingTools, createProcessTool } from "indusagi/agent";
 
-### Actions
+// process is included in the coding tool set
+const agent = new Agent({
+  initialState: { tools: createCodingTools(process.cwd()) },
+});
 
-#### start
-
-Start a command in background:
-
-```
-process action=start name="my-build" command="npm run build"
-process action=start name="dev-server" command="npm run dev" alertOnSuccess=true
-process action=start name="tests" command="npm test" alertOnFailure=true alertOnSuccess=true
+// or create it on its own
+const proc = createProcessTool({ cwd: process.cwd() });
 ```
 
-**Parameters:**
-- `command` (required) - Command to execute
-- `name` (required) - Friendly process name (e.g., "backend-dev", "test-runner")
-- `alertOnSuccess` (optional, default: false) - Get agent turn when completes successfully
-- `alertOnFailure` (optional, default: true) - Get agent turn when fails/crashes
-- `alertOnKill` (optional, default: false) - Get agent turn when killed by signal
+`createProcessTool(options?)` accepts a `ProcessToolOptions`:
 
-#### list
+- `cwd?: string` — working directory (defaults to `process.cwd()`).
+- `controller?: ProcessController` — reuse an existing controller.
+- `getConfiguredShellPath?: () => string | undefined` — choose the shell used to spawn.
+- `defaultTailLines?: number` — lines returned by `output` (default 100).
+- `maxOutputLines?: number` — overall cap on the `output` text (default 200).
 
-Show all managed processes:
+## Tool Parameters
+
+The tool name and label are both `process`. Parameters (`ProcessesParamsType`):
+
+| Parameter | Type | Used by | Notes |
+|-----------|------|---------|-------|
+| `action` | `"start" \| "list" \| "output" \| "logs" \| "kill" \| "clear" \| "write"` | all | required |
+| `command` | string | start | required for `start` |
+| `name` | string | start | required for `start`; friendly name |
+| `id` | string | output, logs, kill, write | `proc_N` or a name match |
+| `input` | string | write | required for `write`; data for stdin |
+| `end` | boolean | write | close stdin after writing |
+| `alertOnSuccess` | boolean | start | default false |
+| `alertOnFailure` | boolean | start | default true |
+| `alertOnKill` | boolean | start | default false |
+
+The tool returns `AgentToolResult<ProcessesDetails>`. `ProcessesDetails` carries `action`, `success`, `message`, and (per action) `process`, `processes`, `output`, `logFiles`, or `cleared`.
+
+## Actions
+
+### start
+
+Run a command in the background. Requires `name` and `command`.
+
+```
+process action=start name="dev-server" command="npm run dev" alertOnFailure=true
+```
+
+Returns `Started "<name>" (proc_N, PID: <pid>)` plus the stdout log path, and a `ProcessInfo` in `details.process`.
+
+### list
+
+Show every managed process with its id, name, command, status, and runtime.
 
 ```
 process action=list
 ```
 
-Shows:
-- Process ID (proc_1, proc_2, etc.)
-- Friendly name
-- Status (running, exited, killed, crashed)
-- PID
-- Command
-- Runtime duration
+Each entry renders as `proc_N "<name>": <command> [<status>] <runtime>`.
 
-#### output
+### output
 
-Get recent stdout/stderr from a process:
+Get recent stdout/stderr. Requires `id` (matches `proc_N` or a process name).
 
 ```
-process action=output id="backend"
-process action=output id="proc_1"
+process action=output id="dev-server"
 ```
 
-Returns the last N lines of output.
+Returns the last `defaultTailLines` (default 100) lines of stdout and stderr, ANSI-stripped, with a header summarizing line counts. The text is capped at `maxOutputLines` (default 200).
 
-#### logs
+### logs
 
-Get log file paths for inspection:
-
-```
-process action=logs id="my-build"
-```
-
-Returns paths to stdout and stderr log files. Use with the `read` tool to inspect.
-
-#### kill
-
-Terminate a process:
+Get the on-disk log file paths. Requires `id`. Use the `read` tool on them for the full output.
 
 ```
-process action=kill id="backend"
-process action=kill id="proc_1"
+process action=logs id="dev-server"
 ```
 
-Gracefully kills the process (SIGTERM → SIGKILL if needed).
+`details.logFiles` contains `stdoutFile`, `stderrFile`, and `combinedFile`.
 
-#### clear
+### kill
 
-Remove all finished processes:
+Terminate a process. Requires `id`.
+
+```
+process action=kill id="dev-server"
+```
+
+The tool calls `manager.kill(id, { signal: "SIGTERM", timeoutMs: 3000 })`: it sends `SIGTERM` to the process group, then waits a 3000 ms grace window. If the group is still alive after the grace window, the process transitions to `terminate_timeout` and the tool reports the timeout back rather than escalating to `SIGKILL` itself (the message points the user at `/ps` → `x` to force-kill). `SIGKILL` is only sent by the manager's whole-list shutdown paths (`shutdownKillAll()` / `cleanup()`). Killing via the tool never triggers an `alertOnKill` turn.
+
+### clear
+
+Remove all finished processes from the list.
 
 ```
 process action=clear
 ```
 
-Removes exited/killed processes from the list.
+Returns `Cleared N finished process(es)` (`details.cleared`).
 
-### Examples
+### write
 
-#### Development Workflow
-
-```
-1. Start dev server:
-   process action=start name="dev-server" command="npm run dev" alertOnFailure=true
-
-2. Run tests in parallel:
-   process action=start name="tests" command="npm test" alertOnSuccess=true
-
-3. Build in background:
-   process action=start name="build" command="npm run build" alertOnSuccess=true
-
-4. Check status:
-   process action=list
-
-5. Get build output:
-   process action=output id="build"
-
-6. Stream test logs:
-   /process:stream tests
-
-7. Kill dev server:
-   process action=kill id="dev-server"
-```
-
-#### CI/CD Automation
+Write data to a running process's stdin. Requires `id` and `input`; pass `end=true` to close stdin afterward (for programs that read until EOF).
 
 ```
-process action=start name="lint" command="npm run lint" alertOnFailure=true
-process action=start name="type-check" command="npm run type-check" alertOnFailure=true
-process action=start name="test" command="npm test" alertOnSuccess=true alertOnFailure=true
-process action=list
+process action=write id="repl" input="print(1+1)\n"
+process action=write id="repl" input="" end=true
 ```
 
-### Alert Parameters
+## Alert Flags
 
-Control when the agent gets a turn to react:
+Alerts control whether the agent gets a turn to react when a process settles. The user always sees process updates in the UI regardless.
 
-| Parameter | Default | When Triggered |
-|-----------|---------|-----------------|
-| `alertOnSuccess` | false | Process exits with code 0 |
-| `alertOnFailure` | true | Process exits with non-zero code or crashes |
-| `alertOnKill` | false | Process killed by external signal |
+| Flag | Default | Fires when |
+|------|---------|------------|
+| `alertOnSuccess` | false | the process exits with code 0 |
+| `alertOnFailure` | true | the process exits non-zero or errors |
+| `alertOnKill` | false | the process is killed by an external signal (not by the tool) |
 
-**Why use alerts?**
-- Success alerts: Confirm build completed, review results
-- Failure alerts: Immediately fix broken tests
-- Kill alerts: React to unexpected terminations
+You do not need to poll; notifications arrive automatically based on these flags, so the agent can start a process and continue with other work.
 
-**Important:** User always sees process updates in UI. Alerts control whether the agent gets a turn to react (e.g., check results, fix code, restart).
-
-## Commands
-
-Interactive commands for manual process management:
-
-### /process:list
-
-Open the interactive process management panel:
+## Examples
 
 ```
-/process:list
-```
-
-**Keyboard shortcuts:**
-- `j/k` - Move selection up/down
-- `J/K` - Scroll logs up/down
-- `enter` - Stream logs for selected process
-- `x` - Kill selected process
-- `c` - Clear finished processes
-- `q` - Quit and return to chat
-
-### /process:stream
-
-Stream logs from a running process:
-
-```
-/process:stream backend
-/process:stream proc_1
-```
-
-Continuously displays stdout/stderr.
-
-### /process:logs
-
-Show log file paths:
-
-```
-/process:logs my-build
-```
-
-Shows file paths for stdout and stderr logs.
-
-### /process:kill
-
-Kill a process:
-
-```
-/process:kill backend
-```
-
-Equivalent to `process action=kill id="backend"`.
-
-### /process:clear
-
-Clear finished processes:
-
-```
-/process:clear
-```
-
-Removes exited/killed processes from the list.
-
-## Usage Patterns
-
-### Long-Running Dev Server
-
-```
+# Long-running dev server, alert on crash
 process action=start name="dev" command="npm run dev" alertOnFailure=true
-```
 
-Runs your dev server and alerts if it crashes.
-
-### Parallel Build & Test
-
-```
+# Parallel build + test, both report on completion
 process action=start name="build" command="npm run build" alertOnSuccess=true
-process action=start name="test" command="npm test" alertOnSuccess=true
-```
+process action=start name="test" command="npm test" alertOnSuccess=true alertOnFailure=true
 
-Both run simultaneously. Agent gets updates when each completes.
+# Check status, then inspect build output
+process action=list
+process action=output id="build"
 
-### Watch Mode for Changes
-
-```
-process action=start name="watch" command="npm run watch"
-```
-
-Runs in background while you continue coding.
-
-### Log Inspection
-
-```
+# Inspect full logs with the read tool
 process action=logs id="build"
-# Then in agent:
-read /tmp/pi-processes-.../proc_1_stdout.log
-```
+# then: read <stdoutFile>
 
-Read full logs using the `read` tool.
+# Stop the dev server
+process action=kill id="dev"
+```
 
 ## Process Lifecycle
 
-1. **Start** - Process created and starts running
-2. **Running** - Process is active and executing
-3. **Exited** - Process completed with exit code 0
-4. **Failed** - Process exited with non-zero code
-5. **Killed** - Process terminated by signal
-6. **Crashed** - Process crashed unexpectedly
+`ProcessStatus` is one of: `running`, `terminating`, `terminate_timeout`, `exited`, `killed`. (`LIVE_STATUSES` is the set `running`, `terminating`, `terminate_timeout`.) An exited process renders as `exit(0)` on success or `exit(<code>)` otherwise. `ProcessInfo` records `id`, `name`, `pid`, `command`, `cwd`, `startTime`, `endTime`, `status`, `exitCode`, `success`, the `stdoutFile` and `stderrFile` paths, and the three alert flags. (The third `combinedFile` path is tracked on the manager's internal record and surfaced via `getLogFiles`/`details.logFiles`, not on the public `ProcessInfo`.)
+
+A background watcher polls running processes every 5000 ms while any are alive and stops once none remain.
 
 ## Output Storage
 
-Process output is stored in temp directory:
+Output is streamed to files, not held in memory. The manager creates one log directory per session:
 
 ```
-$TMPDIR/pi-processes-{timestamp}/
-├── proc_1_stdout.log
-├── proc_1_stderr.log
-├── proc_2_stdout.log
-├── proc_2_stderr.log
-└── ...
+$TMPDIR/indusagi-processes-<timestamp>/
+  proc_1-stdout.log
+  proc_1-stderr.log
+  proc_1-combined.log
+  proc_2-stdout.log
+  ...
 ```
 
-**Auto-cleanup:** Logs are automatically deleted when the session ends.
+`cleanup()` removes the entire log directory with `rmSync`, and `clear` removes the files for finished processes.
 
-## Performance
+## Controller and Manager
 
-- **Minimal memory** - Output stored in files, not memory
-- **Efficient monitoring** - Process checks every 5 seconds
-- **Non-blocking** - Processes run independently
-- **Scalable** - Support for many concurrent processes
-
-## Platform Support
-
-- · macOS 10.15+
-- · Linux (glibc 2.17+)
-- × Windows (not supported)
+`getProcessController(cwd, options?)` returns a per-cwd cached `ProcessController`; passing options updates the existing controller. `ProcessController.getManager()` exposes the `ProcessManager`, whose public methods include `start(name, command, cwd, options?)`, `list()`, `getOutput(id, tailLines?)`, `getLogFiles(id)`, `getCombinedOutput(id, tailLines?)`, `kill(id, { signal?, timeoutMs? })`, `clearFinished()`, and `cleanup()`. Manager activity is reported through `ManagerEvent` values (`process_started`, `process_ended`, `processes_changed`). The constant `MESSAGE_TYPE_PROCESS_UPDATE` (`"ad-process:update"`) tags process update messages.
 
 ## See Also
 
-- [Loading Extensions](../cli/loading-extensions.txt) - How to load extensions
-- [Extensions Guide](../cli/extensions.txt) - Create your own extensions
-- [Tools Reference](./tools-reference.txt) - All available tools
+- [Tools Reference](/docs/agent/tools-reference) — all built-in tools.
+- [Agent Loop and Tools](/docs/agent/loop-and-tools) — how tools are dispatched in the loop.
+- [Agent API Reference](/docs/agent/api-reference) — full Agent API reference.

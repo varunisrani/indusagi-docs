@@ -1,41 +1,31 @@
-> indusagi can help you use the SDK. Ask it to build an integration for your use case.
-
 # SDK
 
-The SDK provides programmatic access to indusagi's agent capabilities. Use it to embed indusagi in other applications, build custom interfaces, or integrate with automated workflows.
+> indusagi can help you use the SDK. Ask it to build an integration for your use case.
+
+The coding agent ships as the `indusagi-coding-agent` package. Its terminal
+binary is `indus` (alias `indusagi`), but the package root barrel (`src/index.ts`)
+also exposes every subsystem as a **namespace** for embedding the agent in
+another program, scripting it in-process, or testing it. Its core LLM, agent,
+and TUI primitives come from the sibling framework package, `indusagi`.
 
 **Example use cases:**
-- Build a custom UI (web, desktop, mobile)
-- Integrate agent capabilities into existing applications
-- Create automated pipelines with agent reasoning
-- Build custom tools that spawn sub-agents
-- Test agent behavior programmatically
 
-See [examples/sdk/](../examples/sdk/) for working examples from minimal to full control.
+- Embed a coding-agent session inside your own application or service.
+- Build a custom interface on top of the conductor's signal stream.
+- Drive a headless JSON-RPC link from in-process instead of spawning a subprocess.
+- Compose your own tool deck, system prompt, and MCP endpoints programmatically.
 
-## Quick Start
+## Table of Contents
 
-```typescript
-import { AuthStorage, createAgentSession, ModelRegistry, SessionManager } from "indusagi-coding-agent";
-
-// Set up credential storage and model registry
-const authStorage = new AuthStorage();
-const modelRegistry = new ModelRegistry(authStorage);
-
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-  authStorage,
-  modelRegistry,
-});
-
-session.subscribe((event) => {
-  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-    process.stdout.write(event.assistantMessageEvent.delta);
-  }
-});
-
-await session.prompt("What files are in the current directory?");
-```
+- [Installation](#installation)
+- [The barrel namespaces](#the-barrel-namespaces)
+- [Quick start: a session conductor](#quick-start-a-session-conductor)
+- [The conductor API](#the-conductor-api)
+- [Signals](#signals)
+- [Running a oneshot](#running-a-oneshot)
+- [Serving / driving the JSON-RPC link](#serving--driving-the-json-rpc-link)
+- [Booting the full CLI](#booting-the-full-cli)
+- [Version](#version)
 
 ## Installation
 
@@ -43,927 +33,294 @@ await session.prompt("What files are in the current directory?");
 npm install indusagi-coding-agent
 ```
 
-The SDK is included in the main package. No separate installation needed.
+The framework package `indusagi` is a dependency and is installed with it (along
+with the agent's other runtime dependencies).
 
-## Core Concepts
+## The barrel namespaces
 
-### createAgentSession()
-
-The main factory function. Creates an `AgentSession` with configurable options.
-
-`createAgentSession()` uses a `ResourceLoader` to supply extensions, skills, prompt templates, themes, and context files. If you do not provide one, it uses `DefaultResourceLoader` with standard discovery.
+`src/index.ts` re-exports each subsystem as a namespace plus the `VERSION`
+constant:
 
 ```typescript
-import { createAgentSession } from "indusagi-coding-agent";
+import {
+  boot,             // CLI launch pipeline + runner registry
+  workspace,        // resolved on-disk layout + branding
+  conductor,        // the session runtime core
+  windowBudget,     // context-window planning / condensing
+  capabilityDeck,   // the built-in tool deck
+  runtimeBridge,    // framework agent wiring
+  addons,           // optional integrations
+  consoleUi,        // the interactive terminal UI
+  channels,         // non-interactive drivers (oneshot + JSON-RPC link)
+  briefing,         // system-prompt composition
+  transcriptExport, // HTML transcript export
+  launch,           // command-line surface (flags, attachments, credentials)
+  insight,          // diagnostics / telemetry
+  kit,              // shared utilities
+  settings,         // settings manager
+  sessions,         // session library
+  VERSION,          // the package version string
+} from "indusagi-coding-agent";
+```
 
-// Minimal: defaults with DefaultResourceLoader
-const { session } = await createAgentSession();
+Each namespace bundles a frozen contract plus its behavior modules. The two you
+reach for most are `conductor` (drive a session) and `channels` (drive it
+headlessly).
 
-// Custom: override specific options
-const { session } = await createAgentSession({
-  model: myModel,
-  tools: [readTool, bashTool],
-  sessionManager: SessionManager.inMemory(),
+## Quick start: a session conductor
+
+The `SessionConductor` is the single seam between the product and the framework
+`Agent`. Create one with `conductor.createSessionConductor`, subscribe to its
+signal stream, and submit a prompt:
+
+```typescript
+import { conductor } from "indusagi-coding-agent";
+
+const session = conductor.createSessionConductor({
+  modelId: "anthropic/claude-sonnet-4-5",
+});
+
+const unsubscribe = session.subscribe((signal) => {
+  if (signal.kind === "text") process.stdout.write(signal.delta);
+});
+
+await session.submit("What files are in the current directory?");
+unsubscribe();
+```
+
+`createSessionConductor(options, deps?)` takes a `SessionConductorOptions` and an
+optional `ConductorDeps` (both declared in `src/conductor/contract.ts` /
+`src/conductor/conductor.ts`). Only `modelId` is required:
+
+```typescript
+const session = conductor.createSessionConductor({
+  modelId: "anthropic/claude-sonnet-4-5",
+  system: "You are a concise assistant.", // override the built-in briefing
+  tools: myTools,                         // AgentTool[]
+  thinking: "medium",                     // off | minimal | low | medium | high | xhigh
+  workspace: "/path/to/project",          // defaults to process.cwd()
+  sessionsDir: "/path/to/sessions",       // persist transcripts here (else in-memory)
+  autoCompact: true,                      // condense automatically near the window
+  getApiKey: async (provider) => process.env[`${provider.toUpperCase()}_API_KEY`],
 });
 ```
 
-### AgentSession
+When `sessionsDir` is set, the conductor backs its transcript store with a
+filesystem backend (one `<sessionId>.ndjson` per session) so the conversation
+survives the process and can be resumed. Absent, the transcript stays in memory.
 
-The session manages the agent lifecycle, message history, and event streaming.
+`getApiKey` is called per request, so short-lived OAuth tokens can be refreshed;
+returning `undefined` lets the framework fall back to its own environment lookup.
 
-```typescript
-interface AgentSession {
-  // Send a prompt and wait for completion
-  // If streaming, requires streamingBehavior option to queue the message
-  prompt(text: string, options?: PromptOptions): Promise<void>;
-  
-  // Queue messages during streaming
-  steer(text: string): Promise<void>;    // Interrupt: delivered after current tool, skips remaining
-  followUp(text: string): Promise<void>; // Wait: delivered only when agent finishes
-  
-  // Subscribe to events (returns unsubscribe function)
-  subscribe(listener: (event: AgentSessionEvent) => void): () => void;
-  
-  // Session info
-  sessionFile: string | undefined;  // undefined for in-memory
-  sessionId: string;
-  
-  // Model control
-  setModel(model: Model): Promise<void>;
-  setThinkingLevel(level: ThinkingLevel): void;
-  cycleModel(): Promise<ModelCycleResult | undefined>;
-  cycleThinkingLevel(): ThinkingLevel | undefined;
-  
-  // State access
-  agent: Agent;
-  model: Model | undefined;
-  thinkingLevel: ThinkingLevel;
-  messages: AgentMessage[];
-  isStreaming: boolean;
-  
-  // Session management
-  newSession(options?: { parentSession?: string }): Promise<boolean>;  // Returns false if cancelled by hook
-  switchSession(sessionPath: string): Promise<boolean>;
-  
-  // Forking
-  fork(entryId: string): Promise<{ selectedText: string; cancelled: boolean }>;  // Creates new session file
-  navigateTree(targetId: string, options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string }): Promise<{ editorText?: string; cancelled: boolean }>;  // In-place navigation
-  
-  // Hook message injection
-  sendHookMessage(message: HookMessage, triggerTurn?: boolean): Promise<void>;
-  
-  // Compaction
-  compact(customInstructions?: string): Promise<CompactionResult>;
-  abortCompaction(): void;
-  
-  // Abort current operation
-  abort(): Promise<void>;
-  
-  // Cleanup
-  dispose(): void;
-}
-```
+### Building a tool deck and system prompt
 
-### Prompting and Message Queueing
-
-The `prompt()` method handles prompt templates, extension commands, and message sending:
+The CLI assembles its deck from `capabilityDeck.provisionDeck` and its prompt
+from `briefing.composeBriefing` (see `src/boot/runners/session.ts`). You can do
+the same:
 
 ```typescript
-// Basic prompt (when not streaming)
-await session.prompt("What files are here?");
+import { conductor, capabilityDeck, briefing } from "indusagi-coding-agent";
 
-// With images
-await session.prompt("What's in this image?", {
-  images: [{ type: "image", source: { type: "base64", mediaType: "image/png", data: "..." } }]
+const tools = capabilityDeck.provisionDeck("all", { cwd: process.cwd() }).tools();
+const system = briefing.composeBriefing({ tools });
+
+const session = conductor.createSessionConductor({
+  modelId: "anthropic/claude-sonnet-4-5",
+  tools,
+  system,
 });
-
-// During streaming: must specify how to queue the message
-await session.prompt("Stop and do this instead", { streamingBehavior: "steer" });
-await session.prompt("After you're done, also check X", { streamingBehavior: "followUp" });
 ```
 
-**Behavior:**
-- **Extension commands** (e.g., `/mycommand`): Execute immediately, even during streaming. They manage their own LLM interaction via `indusagi.sendMessage()`.
-- **File-based prompt templates** (from `.md` files): Expanded to their content before sending/queueing.
-- **During streaming without `streamingBehavior`**: Throws an error. Use `steer()` or `followUp()` directly, or specify the option.
+### Resolving a model id
 
-For explicit queueing during streaming:
+The model catalog and matcher come from the `conductor` namespace:
 
 ```typescript
-// Interrupt the agent (delivered after current tool, skips remaining tools)
-await session.steer("New instruction");
+import { conductor } from "indusagi-coding-agent";
 
-// Wait for agent to finish (delivered only when agent stops)
-await session.followUp("After you're done, also do this");
+const catalog = new conductor.ModelCatalog();
+const card = new conductor.ModelMatcher(catalog).resolve({ pattern: "sonnet" });
+const session = conductor.createSessionConductor({ modelId: card?.id ?? "" });
 ```
 
-Both `steer()` and `followUp()` expand file-based prompt templates but error on extension commands (extension commands cannot be queued).
+## The conductor API
 
-### Agent and AgentState
+A `SessionConductor` (full signature in `src/conductor/contract.ts`) exposes a
+small product API. The most-used members:
 
-The `Agent` class (from `indusagi-agent`) handles the core LLM interaction. Access it via `session.agent`.
+| Member | Purpose |
+|--------|---------|
+| `submit(input)` | Run a user turn to settlement; resolves to a `ConductorState`. |
+| `enqueue(input, mode?)` | Queue an input as a later turn (`"steer"` or `"followUp"`). |
+| `abort()` | Cancel the in-flight turn; emits an `aborted` fault signal. |
+| `subscribe(handler)` | Register a `SignalHandler`; returns an unsubscribe function. |
+| `snapshot()` | Read an immutable `ConductorState`. |
+| `messages()` | The live transcript messages for the active branch. |
+| `model()` | The bound framework `Model`, or `undefined`. |
+| `selectModel(id)` | Bind a model by canonical id for later turns. |
+| `setThinkingLevel(level)` / `cycleThinkingLevel()` | Adjust reasoning effort. |
+| `condense()` | Manually run the transcript-condense path. |
+| `fork(entryId)` / `navigateTree(nodeId)` | Branch / walk the transcript tree. |
+| `executeBash(command, opts?)` | Run a shell command in the session workspace. |
+| `stats()` | A point-in-time `SessionStats` tally. |
+| `resume(sessionId)` | Restore a persisted session. |
+| `newSession()` | Abandon the conversation and start a fresh one. |
+
+`submit` resolves to a `ConductorState` snapshot:
 
 ```typescript
-// Access current state
-const state = session.agent.state;
-
-// state.messages: AgentMessage[] - conversation history
-// state.model: Model - current model
-// state.thinkingLevel: ThinkingLevel - current thinking level
-// state.systemPrompt: string - system prompt
-// state.tools: Tool[] - available tools
-
-// Replace messages (useful for branching, restoration)
-session.agent.replaceMessages(messages);
-
-// Wait for agent to finish processing
-await session.agent.waitForIdle();
+const state = await session.submit("Refactor src/entry.ts");
+// state.phase     -> "idle" | "streaming" | "tooling" | "condensing" | "faulted"
+// state.usage     -> cumulative Usage
+// state.modelId   -> bound model id
+// state.fault     -> ConductorFault when phase === "faulted"
 ```
 
-### Events
+## Signals
 
-Subscribe to events to receive streaming output and lifecycle notifications.
+Subscribe to receive the product-level `SessionSignal` stream (declared in
+`src/conductor/contract.ts`). Switch on `signal.kind`:
 
 ```typescript
-session.subscribe((event) => {
-  switch (event.type) {
-    // Streaming text from assistant
-    case "message_update":
-      if (event.assistantMessageEvent.type === "text_delta") {
-        process.stdout.write(event.assistantMessageEvent.delta);
-      }
-      if (event.assistantMessageEvent.type === "thinking_delta") {
-        // Thinking output (if thinking enabled)
-      }
-      break;
-    
-    // Tool execution
-    case "tool_execution_start":
-      console.log(`Tool: ${event.toolName}`);
-      break;
-    case "tool_execution_update":
-      // Streaming tool output
-      break;
-    case "tool_execution_end":
-      console.log(`Result: ${event.isError ? "error" : "success"}`);
-      break;
-    
-    // Message lifecycle
-    case "message_start":
-      // New message starting
-      break;
-    case "message_end":
-      // Message complete
-      break;
-    
-    // Agent lifecycle
-    case "agent_start":
-      // Agent started processing prompt
-      break;
-    case "agent_end":
-      // Agent finished (event.messages contains new messages)
-      break;
-    
-    // Turn lifecycle (one LLM response + tool calls)
-    case "turn_start":
-      break;
-    case "turn_end":
-      // event.message: assistant response
-      // event.toolResults: tool results from this turn
-      break;
-    
-    // Session events (auto-compaction, retry)
-    case "auto_compaction_start":
-    case "auto_compaction_end":
-    case "auto_retry_start":
-    case "auto_retry_end":
-      break;
+session.subscribe((signal) => {
+  switch (signal.kind) {
+    case "prompt":     /* signal.text  — user turn committed */ break;
+    case "text":       process.stdout.write(signal.delta); break;
+    case "thinking":   /* signal.delta — reasoning chunk */ break;
+    case "tool_start": console.log(`tool ${signal.name} (${signal.id})`); break;
+    case "tool_end":   console.log(`tool ${signal.id} ok=${signal.ok}`); break;
+    case "turn_end":   /* signal.usage */ break;
+    case "persisted":  /* signal.entryId */ break;
+    case "compacted":  break;
+    case "fault":      console.error(signal.fault.kind, signal.fault.message); break;
+    case "queue":      /* signal.count */ break;
+    case "idle":       break;
   }
 });
 ```
 
-## Options Reference
+This is the conductor's re-emitted surface — deliberately distinct from the raw
+framework `AgentEvent` union. Consumers never see a framework loop event
+directly.
 
-### Directories
+## Running a oneshot
 
-```typescript
-const { session } = await createAgentSession({
-  // Working directory for DefaultResourceLoader discovery
-  cwd: process.cwd(), // default
-  
-  // Global config directory
-  agentDir: "~/.indusagi/agent", // default (expands ~)
-});
-```
-
-`cwd` is used by `DefaultResourceLoader` for:
-- Project extensions (`.indusagi/extensions/`)
-- Project skills (`.indusagi/skills/`)
-- Project prompts (`.indusagi/prompts/`)
-- Context files (`AGENTS.md` walking up from cwd)
-- Session directory naming
-
-`agentDir` is used by `DefaultResourceLoader` for:
-- Global extensions (`extensions/`)
-- Global skills (`skills/`)
-- Global prompts (`prompts/`)
-- Global context file (`AGENTS.md`)
-- Settings (`settings.json`)
-- Custom models (`models.json`)
-- Credentials (`auth.json`)
-- Sessions (`sessions/`)
-
-When you pass a custom `ResourceLoader`, `cwd` and `agentDir` no longer control resource discovery. They still influence session naming and tool path resolution.
-
-### Model
+The `channels` namespace exposes the non-interactive oneshot runner — submit
+prompts, stream the result to a sink, resolve an exit code:
 
 ```typescript
-import { getModel } from "indusagi-ai";
-import { AuthStorage, ModelRegistry } from "indusagi-coding-agent";
+import { conductor, channels } from "indusagi-coding-agent";
 
-const authStorage = new AuthStorage();
-const modelRegistry = new ModelRegistry(authStorage);
-
-// Find specific built-in model (doesn't check if API key exists)
-const opus = getModel("anthropic", "claude-opus-4-5");
-if (!opus) throw new Error("Model not found");
-
-// Find any model by provider/id, including custom models from models.json
-// (doesn't check if API key exists)
-const customModel = modelRegistry.find("my-provider", "my-model");
-
-// Get only models that have valid API keys configured
-const available = await modelRegistry.getAvailable();
-
-const { session } = await createAgentSession({
-  model: opus,
-  thinkingLevel: "medium", // off, minimal, low, medium, high, xhigh
-  
-  // Models for cycling (Ctrl+P in interactive mode)
-  scopedModels: [
-    { model: opus, thinkingLevel: "high" },
-    { model: haiku, thinkingLevel: "off" },
-  ],
-  
-  authStorage,
-  modelRegistry,
-});
-```
-
-If no model is provided:
-1. Tries to restore from session (if continuing)
-2. Uses default from settings
-3. Falls back to first available model
-
-> See [examples/sdk/02-custom-model.ts](../examples/sdk/02-custom-model.ts)
-
-### API Keys and OAuth
-
-API key resolution priority (handled by AuthStorage):
-1. Runtime overrides (via `setRuntimeApiKey`, not persisted)
-2. Stored credentials in `auth.json` (API keys or OAuth tokens)
-3. Environment variables (`ANTHROPIC_AINDUSAGI_KEY`, `OPENAI_AINDUSAGI_KEY`, etc.)
-4. Fallback resolver (for custom provider keys from `models.json`)
-
-```typescript
-import { AuthStorage, ModelRegistry } from "indusagi-coding-agent";
-
-// Default: uses ~/.indusagi/agent/auth.json and ~/.indusagi/agent/models.json
-const authStorage = new AuthStorage();
-const modelRegistry = new ModelRegistry(authStorage);
-
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-  authStorage,
-  modelRegistry,
+const session = conductor.createSessionConductor({
+  modelId: "anthropic/claude-sonnet-4-5",
 });
 
-// Runtime API key override (not persisted to disk)
-authStorage.setRuntimeApiKey("anthropic", "sk-my-temp-key");
-
-// Custom auth storage location
-const customAuth = new AuthStorage("/my/app/auth.json");
-const customRegistry = new ModelRegistry(customAuth, "/my/app/models.json");
-
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-  authStorage: customAuth,
-  modelRegistry: customRegistry,
-});
-
-// No custom models.json (built-in models only)
-const simpleRegistry = new ModelRegistry(authStorage);
-```
-
-> See [examples/sdk/09-api-keys-and-oauth.ts](../examples/sdk/09-api-keys-and-oauth.ts)
-
-### System Prompt
-
-Use a `ResourceLoader` to override the system prompt:
-
-```typescript
-import { createAgentSession, DefaultResourceLoader } from "indusagi-coding-agent";
-
-const loader = new DefaultResourceLoader({
-  systemPromptOverride: () => "You are a helpful assistant.",
-});
-await loader.reload();
-
-const { session } = await createAgentSession({ resourceLoader: loader });
-```
-
-> See [examples/sdk/03-custom-prompt.ts](../examples/sdk/03-custom-prompt.ts)
-
-### Tools
-
-```typescript
-import {
-  codingTools,   // read, bash, edit, write (default)
-  readOnlyTools, // read, grep, find, ls
-  readTool, bashTool, editTool, writeTool,
-  grepTool, findTool, lsTool,
-} from "indusagi-coding-agent";
-
-// Use built-in tool set
-const { session } = await createAgentSession({
-  tools: readOnlyTools,
-});
-
-// Pick specific tools
-const { session } = await createAgentSession({
-  tools: [readTool, bashTool, grepTool],
-});
-```
-
-#### Tools with Custom cwd
-
-**Important:** The pre-built tool instances (`readTool`, `bashTool`, etc.) use `process.cwd()` for path resolution. When you specify a custom `cwd` AND provide explicit `tools`, you must use the tool factory functions to ensure paths resolve correctly:
-
-```typescript
-import {
-  createCodingTools,    // Creates [read, bash, edit, write] for specific cwd
-  createReadOnlyTools,  // Creates [read, grep, find, ls] for specific cwd
-  createReadTool,
-  createBashTool,
-  createEditTool,
-  createWriteTool,
-  createGrepTool,
-  createFindTool,
-  createLsTool,
-} from "indusagi-coding-agent";
-
-const cwd = "/path/to/project";
-
-// Use factory for tool sets
-const { session } = await createAgentSession({
-  cwd,
-  tools: createCodingTools(cwd),  // Tools resolve paths relative to cwd
-});
-
-// Or pick specific tools
-const { session } = await createAgentSession({
-  cwd,
-  tools: [createReadTool(cwd), createBashTool(cwd), createGrepTool(cwd)],
-});
-```
-
-**When you don't need factories:**
-- If you omit `tools`, indusagi automatically creates them with the correct `cwd`
-- If you use `process.cwd()` as your `cwd`, the pre-built instances work fine
-
-**When you must use factories:**
-- When you specify both `cwd` (different from `process.cwd()`) AND `tools`
-
-> See [examples/sdk/05-tools.ts](../examples/sdk/05-tools.ts)
-
-### Custom Tools
-
-```typescript
-import { Type } from "@sinclair/typebox";
-import { createAgentSession, type ToolDefinition } from "indusagi-coding-agent";
-
-// Inline custom tool
-const myTool: ToolDefinition = {
-  name: "my_tool",
-  label: "My Tool",
-  description: "Does something useful",
-  parameters: Type.Object({
-    input: Type.String({ description: "Input value" }),
-  }),
-  execute: async (toolCallId, params, onUpdate, ctx, signal) => ({
-    content: [{ type: "text", text: `Result: ${params.input}` }],
-    details: {},
-  }),
+const stdout: channels.WritableLine = {
+  write: (chunk, cb) => process.stdout.write(chunk, cb),
 };
 
-// Pass custom tools directly
-const { session } = await createAgentSession({
-  customTools: [myTool],
+const ctx: channels.ChannelContext = {
+  conductor: session,
+  out: stdout,
+  framer: channels.ndjsonFramer,
+  dialog: channels.inertDialog, // no driver attached: asks resolve to their fallback
+};
+
+const exitCode = await channels.runOneshot(ctx, {
+  shape: "text",                         // "text" (clean answer) or "ndjson" (event log)
+  prompts: ["Summarise the repository"],
 });
+process.exit(exitCode);
 ```
 
-Custom tools passed via `customTools` are combined with extension-registered tools. Extensions loaded by the ResourceLoader can also register tools via `indusagi.registerTool()`.
+The `"text"` shape writes the accumulated answer as one trailing line; the
+`"ndjson"` shape streams every signal as a framed line, bracketed by `start` /
+`end` frames. See [print / JSON mode](json.md) for the wire shape.
 
-> See [examples/sdk/05-tools.ts](../examples/sdk/05-tools.ts)
+## Serving / driving the JSON-RPC link
 
-### Extensions
+The link channel is the bidirectional JSON-RPC 2.0 server plus a generated
+client. Both come from the `channels` namespace.
 
-Extensions are loaded by the `ResourceLoader`. `DefaultResourceLoader` discovers extensions from `~/.indusagi/agent/extensions/`, `.indusagi/extensions/`, and settings.json extension sources.
+### Serve a session over an injected transport
 
 ```typescript
-import { createAgentSession, DefaultResourceLoader } from "indusagi-coding-agent";
+import { conductor, channels } from "indusagi-coding-agent";
 
-const loader = new DefaultResourceLoader({
-  additionalExtensionPaths: ["/path/to/my-extension.ts"],
-  extensionFactories: [
-    (indusagi) => {
-      indusagi.on("agent_start", () => {
-        console.log("[Inline Extension] Agent starting");
-      });
+const session = conductor.createSessionConductor({
+  modelId: "anthropic/claude-sonnet-4-5",
+});
+
+const stdout: channels.WritableLine = {
+  write: (chunk, cb) => process.stdout.write(chunk, cb),
+};
+
+const server = channels.createLinkServer(
+  channels.SESSION_OPS,                 // the declarative op registry
+  session,
+  { in: process.stdin as channels.ReadableChunks, out: stdout },
+);
+
+await server.done; // resolves when the inbound stream ends
+```
+
+### Drive a child process with the generated client
+
+`createLinkDriver` returns a `Proxy`-backed client typed from the registry — one
+callable method per op, no hand-written method bodies:
+
+```typescript
+import { channels } from "indusagi-coding-agent";
+
+// channels.SessionOps types the registry; client gets one method per op.
+const { client, done, close } = channels.createLinkDriver<typeof channels.SESSION_OPS>(
+  { out: childStdin, in: childStdout },
+  {
+    onSignal: (signal) => {
+      if (signal.name === "text") process.stdout.write((signal.body as any).delta);
     },
-  ],
-});
-await loader.reload();
+    onAsk: (ask) => null, // dismiss every blocking dialog
+  },
+);
 
-const { session } = await createAgentSession({ resourceLoader: loader });
+const snapshot = await client.submit({ input: "List the files in src" });
+console.log(snapshot.model, snapshot.usage);
+
+close();
 ```
 
-Extensions can register tools, subscribe to events, add commands, and more. See [extensions.md](extensions.md) for the full API.
+The op registry is `channels.SESSION_OPS` with methods `submit`, `abort`,
+`snapshot`, `resume`, `listModels`, `cycleModel`. The framer
+(`channels.ndjsonFramer`), error codes (`channels.OP_ERROR`), and protocol
+version (`channels.PROTOCOL_VERSION`) are exported alongside. See the
+[link protocol](rpc.md) for the wire format.
 
-**Event Bus:** Extensions can communicate via `indusagi.events`. Pass a shared `eventBus` to `DefaultResourceLoader` if you need to emit or listen from outside:
+## Booting the full CLI
+
+To run the complete launch pipeline (flag parsing, workspace resolution, runner
+dispatch) from your own entry point, call `boot` with a sliced argv. It resolves
+to the process exit code:
 
 ```typescript
-import { createEventBus, DefaultResourceLoader } from "indusagi-coding-agent";
+import { boot } from "indusagi-coding-agent";
 
-const eventBus = createEventBus();
-const loader = new DefaultResourceLoader({
-  eventBus,
-});
-await loader.reload();
-
-eventBus.on("my-extension:status", (data) => console.log(data));
+const exitCode = await boot(process.argv.slice(2));
+process.exit(exitCode);
 ```
 
-> See [examples/sdk/06-extensions.ts](../examples/sdk/06-extensions.ts) and [docs/extensions.md](extensions.md)
+`boot` selects a runner via the registry in `src/boot/runners/registry.ts`:
+`replRunner` (interactive), `oneshotRunner` (print/JSON), or `linkRunner`
+(JSON-RPC) — chosen from the resolved invocation mode. The `launch` namespace
+exposes the lower-level pieces (`readInvocation`, `renderUsage`,
+`gatherAttachments`) if you want to parse a command line without dispatching it.
 
-### Skills
+## Version
 
 ```typescript
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  type Skill,
-} from "indusagi-coding-agent";
-
-const customSkill: Skill = {
-  name: "my-skill",
-  description: "Custom instructions",
-  filePath: "/path/to/SKILL.md",
-  baseDir: "/path/to",
-  source: "custom",
-};
-
-const loader = new DefaultResourceLoader({
-  skillsOverride: (current) => ({
-    skills: [...current.skills, customSkill],
-    diagnostics: current.diagnostics,
-  }),
-});
-await loader.reload();
-
-const { session } = await createAgentSession({ resourceLoader: loader });
+import { VERSION } from "indusagi-coding-agent";
+console.log(VERSION);
 ```
 
-> See [examples/sdk/04-skills.ts](../examples/sdk/04-skills.ts)
-
-### Context Files
-
-```typescript
-import { createAgentSession, DefaultResourceLoader } from "indusagi-coding-agent";
-
-const loader = new DefaultResourceLoader({
-  agentsFilesOverride: (current) => ({
-    agentsFiles: [
-      ...current.agentsFiles,
-      { path: "/virtual/AGENTS.md", content: "# Guidelines\n\n- Be concise" },
-    ],
-  }),
-});
-await loader.reload();
-
-const { session } = await createAgentSession({ resourceLoader: loader });
-```
-
-> See [examples/sdk/07-context-files.ts](../examples/sdk/07-context-files.ts)
-
-### Slash Commands
-
-```typescript
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  type PromptTemplate,
-} from "indusagi-coding-agent";
-
-const customCommand: PromptTemplate = {
-  name: "deploy",
-  description: "Deploy the application",
-  source: "(custom)",
-  content: "# Deploy\n\n1. Build\n2. Test\n3. Deploy",
-};
-
-const loader = new DefaultResourceLoader({
-  promptsOverride: (current) => ({
-    prompts: [...current.prompts, customCommand],
-    diagnostics: current.diagnostics,
-  }),
-});
-await loader.reload();
-
-const { session } = await createAgentSession({ resourceLoader: loader });
-```
-
-> See [examples/sdk/08-prompt-templates.ts](../examples/sdk/08-prompt-templates.ts)
-
-### Session Management
-
-Sessions use a tree structure with `id`/`parentId` linking, enabling in-place branching.
-
-```typescript
-import { createAgentSession, SessionManager } from "indusagi-coding-agent";
-
-// In-memory (no persistence)
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-});
-
-// New persistent session
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.create(process.cwd()),
-});
-
-// Continue most recent
-const { session, modelFallbackMessage } = await createAgentSession({
-  sessionManager: SessionManager.continueRecent(process.cwd()),
-});
-if (modelFallbackMessage) {
-  console.log("Note:", modelFallbackMessage);
-}
-
-// Open specific file
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.open("/path/to/session.jsonl"),
-});
-
-// List available sessions (async with optional progress callback)
-const sessions = await SessionManager.list(process.cwd());
-for (const info of sessions) {
-  console.log(`${info.id}: ${info.firstMessage} (${info.messageCount} messages, cwd: ${info.cwd})`);
-}
-
-// List all sessions across all projects
-const allSessions = await SessionManager.listAll((loaded, total) => {
-  console.log(`Loading ${loaded}/${total}...`);
-});
-
-// Custom session directory (no cwd encoding)
-const customDir = "/path/to/my-sessions";
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.create(process.cwd(), customDir),
-});
-```
-
-**SessionManager tree API:**
-
-```typescript
-const sm = SessionManager.open("/path/to/session.jsonl");
-
-// Tree traversal
-const entries = sm.getEntries();        // All entries (excludes header)
-const tree = sm.getTree();              // Full tree structure
-const path = sm.getPath();              // Path from root to current leaf
-const leaf = sm.getLeafEntry();         // Current leaf entry
-const entry = sm.getEntry(id);          // Get entry by ID
-const children = sm.getChildren(id);    // Direct children of entry
-
-// Labels
-const label = sm.getLabel(id);          // Get label for entry
-sm.appendLabelChange(id, "checkpoint"); // Set label
-
-// Branching
-sm.branch(entryId);                     // Move leaf to earlier entry
-sm.branchWithSummary(id, "Summary...");  // Branch with context summary
-sm.createBranchedSession(leafId);       // Extract path to new file
-```
-
-> See [examples/sdk/11-sessions.ts](../examples/sdk/11-sessions.ts) and [docs/session.md](session.md)
-
-### Settings Management
-
-```typescript
-import { createAgentSession, SettingsManager, SessionManager } from "indusagi-coding-agent";
-
-// Default: loads from files (global + project merged)
-const { session } = await createAgentSession({
-  settingsManager: SettingsManager.create(),
-});
-
-// With overrides
-const settingsManager = SettingsManager.create();
-settingsManager.applyOverrides({
-  compaction: { enabled: false },
-  retry: { enabled: true, maxRetries: 5 },
-});
-const { session } = await createAgentSession({ settingsManager });
-
-// In-memory (no file I/O, for testing)
-const { session } = await createAgentSession({
-  settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
-  sessionManager: SessionManager.inMemory(),
-});
-
-// Custom directories
-const { session } = await createAgentSession({
-  settingsManager: SettingsManager.create("/custom/cwd", "/custom/agent"),
-});
-```
-
-**Static factories:**
-- `SettingsManager.create(cwd?, agentDir?)` - Load from files
-- `SettingsManager.inMemory(settings?)` - No file I/O
-
-**Project-specific settings:**
-
-Settings load from two locations and merge:
-1. Global: `~/.indusagi/agent/settings.json`
-2. Project: `<cwd>/.indusagi/settings.json`
-
-Project overrides global. Nested objects merge keys. Setters modify global settings by default.
-
-> See [examples/sdk/10-settings.ts](../examples/sdk/10-settings.ts)
-
-## ResourceLoader
-
-Use `DefaultResourceLoader` to discover extensions, skills, prompts, themes, and context files.
-
-```typescript
-import {
-  DefaultResourceLoader,
-  getAgentDir,
-} from "indusagi-coding-agent";
-
-const loader = new DefaultResourceLoader({
-  cwd,
-  agentDir: getAgentDir(),
-});
-await loader.reload();
-
-const extensions = loader.getExtensions();
-const skills = loader.getSkills();
-const prompts = loader.getPrompts();
-const themes = loader.getThemes();
-const contextFiles = loader.getAgentsFiles().agentsFiles;
-```
-
-## Return Value
-
-`createAgentSession()` returns:
-
-```typescript
-interface CreateAgentSessionResult {
-  // The session
-  session: AgentSession;
-  
-  // Extensions result (for runner setup)
-  extensionsResult: LoadExtensionsResult;
-  
-  // Warning if session model couldn't be restored
-  modelFallbackMessage?: string;
-}
-
-interface LoadExtensionsResult {
-  extensions: Extension[];
-  errors: Array<{ path: string; error: string }>;
-  runtime: ExtensionRuntime;
-}
-```
-
-## Complete Example
-
-```typescript
-import { getModel } from "indusagi-ai";
-import { Type } from "@sinclair/typebox";
-import {
-  AuthStorage,
-  createAgentSession,
-  DefaultResourceLoader,
-  ModelRegistry,
-  SessionManager,
-  SettingsManager,
-  readTool,
-  bashTool,
-  type ToolDefinition,
-} from "indusagi-coding-agent";
-
-// Set up auth storage (custom location)
-const authStorage = new AuthStorage("/custom/agent/auth.json");
-
-// Runtime API key override (not persisted)
-if (process.env.MY_KEY) {
-  authStorage.setRuntimeApiKey("anthropic", process.env.MY_KEY);
-}
-
-// Model registry (no custom models.json)
-const modelRegistry = new ModelRegistry(authStorage);
-
-// Inline tool
-const statusTool: ToolDefinition = {
-  name: "status",
-  label: "Status",
-  description: "Get system status",
-  parameters: Type.Object({}),
-  execute: async () => ({
-    content: [{ type: "text", text: `Uptime: ${process.uptime()}s` }],
-    details: {},
-  }),
-};
-
-const model = getModel("anthropic", "claude-opus-4-5");
-if (!model) throw new Error("Model not found");
-
-// In-memory settings with overrides
-const settingsManager = SettingsManager.inMemory({
-  compaction: { enabled: false },
-  retry: { enabled: true, maxRetries: 2 },
-});
-
-const loader = new DefaultResourceLoader({
-  cwd: process.cwd(),
-  agentDir: "/custom/agent",
-  settingsManager,
-  systemPromptOverride: () => "You are a minimal assistant. Be concise.",
-});
-await loader.reload();
-
-const { session } = await createAgentSession({
-  cwd: process.cwd(),
-  agentDir: "/custom/agent",
-
-  model,
-  thinkingLevel: "off",
-  authStorage,
-  modelRegistry,
-
-  tools: [readTool, bashTool],
-  customTools: [statusTool],
-  resourceLoader: loader,
-
-  sessionManager: SessionManager.inMemory(),
-  settingsManager,
-});
-
-session.subscribe((event) => {
-  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-    process.stdout.write(event.assistantMessageEvent.delta);
-  }
-});
-
-await session.prompt("Get status and list files.");
-```
-
-## Run Modes
-
-The SDK exports run mode utilities for building custom interfaces on top of `createAgentSession()`:
-
-### InteractiveMode
-
-Full TUI interactive mode with editor, chat history, and all built-in commands:
-
-```typescript
-import { createAgentSession, InteractiveMode } from "indusagi-coding-agent";
-
-const { session } = await createAgentSession({ /* ... */ });
-
-const mode = new InteractiveMode(session, {
-  // All optional
-  migratedProviders: [],           // Show migration warnings
-  modelFallbackMessage: undefined, // Show model restore warning
-  initialMessage: "Hello",         // Send on startup
-  initialImages: [],               // Images with initial message
-  initialMessages: [],             // Additional startup prompts
-});
-
-await mode.run();  // Blocks until exit
-```
-
-### runPrintMode
-
-Single-shot mode: send prompts, output result, exit:
-
-```typescript
-import { createAgentSession, runPrintMode } from "indusagi-coding-agent";
-
-const { session } = await createAgentSession({ /* ... */ });
-
-await runPrintMode(session, {
-  mode: "text",              // "text" for final response, "json" for all events
-  initialMessage: "Hello",   // First message (can include @file content)
-  initialImages: [],         // Images with initial message
-  messages: ["Follow up"],   // Additional prompts
-});
-```
-
-### runRpcMode
-
-JSON-RPC mode for subprocess integration:
-
-```typescript
-import { createAgentSession, runRpcMode } from "indusagi-coding-agent";
-
-const { session } = await createAgentSession({ /* ... */ });
-
-await runRpcMode(session);  // Reads JSON commands from stdin, writes to stdout
-```
-
-See [RPC documentation](rpc.md) for the JSON protocol.
-
-## RPC Mode Alternative
-
-For subprocess-based integration without building with the SDK, use the CLI directly:
-
-```bash
-indusagi --mode rpc --no-session
-```
-
-See [RPC documentation](rpc.md) for the JSON protocol.
-
-The SDK is preferred when:
-- You want type safety
-- You're in the same Node.js process
-- You need direct access to agent state
-- You want to customize tools/extensions programmatically
-
-RPC mode is preferred when:
-- You're integrating from another language
-- You want process isolation
-- You're building a language-agnostic client
-
-## Exports
-
-The main entry point exports:
-
-```typescript
-// Factory
-createAgentSession
-
-// Auth and Models
-AuthStorage
-ModelRegistry
-
-// Resource loading
-DefaultResourceLoader
-type ResourceLoader
-createEventBus
-
-// Helpers
-
-// Session management
-SessionManager
-SettingsManager
-
-// Built-in tools (use process.cwd())
-codingTools
-readOnlyTools
-readTool, bashTool, editTool, writeTool
-grepTool, findTool, lsTool
-
-// Tool factories (for custom cwd)
-createCodingTools
-createReadOnlyTools
-createReadTool, createBashTool, createEditTool, createWriteTool
-createGrepTool, createFindTool, createLsTool
-
-// Types
-type CreateAgentSessionOptions
-type CreateAgentSessionResult
-type ExtensionFactory
-type ExtensionAPI
-type ToolDefinition
-type Skill
-type PromptTemplate
-type Tool
-
-// Subagents
-SubagentStore
-createTaskTool
-
-// Hooks
-loadHooks
-HookFactory
-type Hooks
-type HookInitContext
-```
-
-For extension types, see [extensions.md](extensions.md) for the full API.
-For subagents, see [subagents.md](subagents.md).
-For hooks, see [hooks.md](hooks.md).
+For one-shot scripting from a shell, see [print / JSON mode](json.md). For
+cross-language or process-isolated integration, see the
+[link protocol](rpc.md).

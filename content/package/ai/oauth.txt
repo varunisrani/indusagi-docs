@@ -1,61 +1,96 @@
 # OAuth Providers
 
-OAuth helpers live in `indusagi/src/ai/utils/oauth` and are re-exported from `indusagi/ai`.
-They provide login, refresh, and API key extraction for providers that do not use static API keys.
+OAuth helpers live in `src/facade/ml/kit/auth/*` and are re-exported from
+`indusagi/ai`. They provide login, refresh, and API-key extraction for providers
+that authenticate over OAuth.
+
+> The OAuth registry currently ships in API-KEY-ONLY MODE. The provider objects
+> exist and are exported, but none are registered, so `getOAuthProviders()`
+> returns `[]` and both the CLI and the interactive TUI fall through to the
+> API-key path. Register a provider explicitly with `registerOAuthProvider(...)`
+> to enable its OAuth flow.
 
 ## Registry API
 
-- `getOAuthProvider(id)`
-- `getOAuthProviders()`
-- `registerOAuthProvider(provider)`
-- `getOAuthApiKey(providerId, credentialsMap)`
+From `src/facade/ml/kit/auth/index.ts`:
 
-`getOAuthApiKey` refreshes tokens when expired and returns the new credentials plus an API key string.
+- `getOAuthProvider(id)` returns the registered provider or `undefined`.
+- `registerOAuthProvider(provider)` adds (or replaces) a provider in the registry.
+- `getOAuthProviders()` lists registered providers.
+- `getOAuthProviderInfoList()` returns slim `{ id, name, available }` summaries (deprecated).
+- `getOAuthApiKey(providerId, credentialsMap)` resolves an API key from a stored
+  credential, refreshing it first if it has expired. Returns
+  `{ newCredentials, apiKey }` or `null` when no credential exists.
+- `refreshOAuthToken(providerId, credentials)` (deprecated) renews a credential.
+- `ensureFreshOAuthCredentials(providerId, credentials)` returns
+  `{ credentials, refreshed }`, refreshing only when expired.
 
-## CLI Helper
+## Credential Types
 
-`indusagi/src/ai/cli.ts` provides a small CLI that stores tokens in `auth.json`.
-It supports `login` and `list` commands and uses the OAuth registry.
+From `src/facade/ml/kit/auth/types.ts`:
+
+- `OAuthCredentials` (`{ access, refresh, expires, issuedAt?, provider? }`).
+- `AuthProviderContract` (alias `OAuthProviderInterface`) — `id`, `name`,
+  `login`, `refreshToken`, `getApiKey`, optional `usesCallbackServer` and `modifyModels`.
+- `OAuthLoginCallbacks` (`onAuth`, `onPrompt`, optional `onManualCodeInput`,
+  `onProgress`, `signal`).
+- `makeOAuthCredentials(access, refresh, expiresMs, extra?)` and
+  `getTokenStatus(creds)` (returns `"valid" | "expired" | "missing"`).
+
+## PKCE
+
+`src/facade/ml/kit/auth/pkce.ts` exports `generatePKCE()`, which returns a
+`{ verifier, challenge }` pair (RFC 7636, S256) built on the Web Crypto API so it
+runs under Node.js 20+ and in browsers.
 
 ## Provider Summary
 
-### Anthropic
+### Anthropic (Claude Pro/Max)
 
-File: `utils/oauth/anthropic.ts`
+File: `kit/auth/anthropic.ts`. Provider id `anthropic`,
+name `"Anthropic (Claude Pro/Max)"`.
 
-- Uses PKCE and a manual code paste flow.
-- Returns access and refresh tokens.
+- `loginAnthropic(onAuthUrl, onPromptCode)` runs a PKCE flow with a manual
+  authorization-code paste.
+- `refreshAnthropicToken(refreshToken)` renews the credential.
 - `getApiKey` returns the access token.
+- Also exports `anthropicOAuthProvider` and `isAnthropicOAuthCredentialsValid`.
 
 ### GitHub Copilot
 
-File: `utils/oauth/github-copilot.ts`
+File: `kit/auth/github-copilot.ts`. Provider id `github-copilot`, name `"GitHub Copilot"`.
 
-- Uses GitHub device flow and exchanges for a Copilot token.
-- Supports GitHub Enterprise domains.
-- `modifyModels` updates the Copilot base URL from token metadata.
+- `loginGitHubCopilot` (via `copilotAuthFlow`) uses the GitHub device-authorization grant.
+- `refreshGitHubCopilotToken(refreshToken, enterpriseDomain?)` renews the token.
+- `getGitHubCopilotBaseUrl(token?, enterpriseDomain?)` resolves the Copilot base URL.
+- `normalizeDomain(raw)` normalizes an enterprise domain.
+- Also exports `githubCopilotOAuthProvider` and `isGitHubCopilotOAuthCredentialsValid`.
 
-### Google Cloud Code Assist (Gemini CLI)
+### ChatGPT Codex (OpenAI)
 
-File: `utils/oauth/google-gemini-cli.ts`
+File: `kit/auth/openai-codex.ts`. Provider id `openai-codex`,
+name `"ChatGPT Plus or Pro — Codex plan"`, `usesCallbackServer: true`.
 
-- Uses local callback server on port 8085.
-- Requires `GEMINI_CLI_CLIENT_ID` and `GEMINI_CLI_CLIENT_SECRET`.
-- Returns a JSON API key string `{ token, projectId }`.
+- `loginOpenAICodex({ onAuth, onPrompt, onProgress?, onManualCodeInput? })` runs a
+  PKCE flow with a local callback server bound to `127.0.0.1:1455`
+  (redirect URI `http://localhost:1455/auth/callback`). If the port cannot be
+  bound, it falls back to manual code entry.
+- `refreshOpenAICodexToken(refreshToken)` renews the credential.
+- Also exports `openaiCodexOAuthProvider`.
 
-### Google Antigravity
+### Kimi (Moonshot AI)
 
-File: `utils/oauth/google-antigravity.ts`
+File: `kit/auth/kimi.ts`. Kimi is API-key only — there is no OAuth flow.
 
-- Uses local callback server on port 51121.
-- Uses a different Google OAuth client for access to additional models.
-- Returns a JSON API key string `{ token, projectId }`.
+- `loginKimi()` and `refreshKimiToken()` always throw; use
+  `getEnvApiKey("kimi")` (`MOONSHOT_API_KEY`) instead.
+- `isKimiApiKeyStyleCredential(credentials)` reports whether a credential is the
+  key-style shape.
 
-### OpenAI Codex (ChatGPT OAuth)
+## Login CLI
 
-File: `utils/oauth/openai-codex.ts`
-
-- Uses local callback server on port 1455.
-- Uses PKCE and stores ChatGPT account ID from the JWT payload.
-- `getApiKey` returns the access token.
-
+`src/facade/ml/cli.ts` is a standalone helper (shebang `#!/usr/bin/env node`,
+usage banner `indusvx-ml <command> [provider]`) that stores OAuth credentials in a
+local `auth.json`. It supports `list`, `login [provider]`, `refresh <provider>`,
+and `help`. Because the registry ships empty, it lists no providers until one is
+registered. This module is not re-exported from `indusagi/ai`.

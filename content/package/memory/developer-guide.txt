@@ -1,606 +1,263 @@
-# Memory System - Developer Guide
+# Memory Module - Developer Guide
+
+> `indusagi/memory` exports nothing. To use the memory behaviour — context
+> condensation, run-event observation, and durable session history — you drive
+> `createAgent` from `indusagi/runtime` and inject a store and/or ledger. This
+> guide shows how, and how the internal pieces fit together.
+
+## Table of contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Configuring condensation](#configuring-condensation)
+- [Observing a run through the ledger](#observing-a-run-through-the-ledger)
+- [Persisting and resuming sessions](#persisting-and-resuming-sessions)
+- [The pieces in isolation](#the-pieces-in-isolation)
+- [Schema migration on load](#schema-migration-on-load)
+- [Notes and limits](#notes-and-limits)
 
 ## Overview
 
-The Memory module in indusagi provides intelligent context management with semantic understanding, persistent storage, and multiple memory processors.
+There is no `Memory` class. "Memory" in this codebase is three runtime concerns
+that the conductor (`createAgent`) coordinates:
+
+1. **Condensation** — when accumulated history nears the model window, the oldest
+   prefix is distilled into one summary turn and a recent tail is kept verbatim.
+2. **The ledger** — every step of a run publishes a `RunEvent` you can subscribe
+   to for streaming output and progress.
+3. **The session store** — settled history is written to disk as a
+   content-addressed, branchable DAG so it can be resumed later.
+
+All three are reached through the public `indusagi/runtime` entrypoint.
 
 ## Architecture
 
 ```
-indusagi/memory
-├── Memory              (Orchestrator)
-├── Processors
-│   ├── WorkingMemory   (Short-term context)
-│   ├── SemanticRecall  (Semantic search)
-│   ├── MessageHistory  (Conversation history)
-│   └── ObservationalMemory (Advanced observations)
-├── Storage
-│   ├── MemoryStorage   (Base interface)
-│   └── InMemoryStorage (Default implementation)
-├── Vector Stores
-│   ├── VectorStore     (Base interface)
-│   └── InMemoryVectorStore (Default implementation)
-├── Embedders
-│   ├── Embedder        (Base interface)
-│   └── OpenAIEmbedder  (OpenAI implementation)
-└── Types               (Protocol definitions)
+indusagi/runtime  →  createAgent(config, deps)
+  │
+  ├─ context condensation   src/runtime/memory/
+  │     estimateContextTokens · shouldCompact · findCutPoint · summarize · compact
+  │
+  ├─ run event ledger       src/runtime/ledger/
+  │     RunLedger · SnapshotAccumulator
+  │
+  └─ session store          src/runtime/store/
+        hashNode · SessionGraph · SessionStore
 ```
 
-## Core Components
+`indusagi/memory` itself is `export {}` — a placeholder subpath with no symbols.
 
-### 1. Memory Class - Main Orchestrator
+## Configuring condensation
 
-Central class that manages all memory processors and storage.
+Condensation is governed by `AgentConfig.compaction`, a `CompactionPolicy`.
+Omit it and condensation is disabled.
 
-**Import:**
 ```typescript
-import { Memory, type MemoryConfig } from "indusagi/memory";
-```
+import { createAgent } from "indusagi/runtime";
+import type { AgentConfig } from "indusagi/runtime";
 
-**Creating Memory:**
-```typescript
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: "resource", // "global" or "resource"
-    },
-    semanticRecall: {
-      enabled: true,
-      topK: 5,
-      threshold: 0.7,
-    },
-    lastMessages: 10,
+const config: AgentConfig = {
+  model: "claude-sonnet-4",
+  compaction: {
+    triggerRatio: 0.8, // condense once history reaches 80% of the window
+    keepRecent: 8,     // always keep the last 8 turns verbatim
   },
-});
+};
+
+const agent = createAgent(config);
+const final = await agent.submit("Walk me through the build pipeline.");
 ```
 
-**With embeddings:**
-```typescript
-import { InMemoryVectorStore } from "indusagi/memory";
-import { OpenAIEmbedder, createOpenAIEmbedder } from "indusagi/memory";
+When the next model call is about to exceed `triggerRatio` of the model's
+context window, the conductor condenses the oldest prefix into one
+`user`-role summary turn prefixed with `"[condensed earlier context]"`, keeping
+the most recent `keepRecent` turns untouched. The cut never splits a
+`tool_call` from its matching `tool_result`. The defaults applied when no policy
+is supplied are `triggerRatio: 0.8` and `keepRecent: 8`.
 
-const vectorStore = new InMemoryVectorStore();
-const embedder = createOpenAIEmbedder({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: "text-embedding-3-small",
+The footprint check is heuristic, not a real tokenizer: roughly 4 characters per
+token plus a small per-turn surcharge. It intentionally errs toward condensing a
+little early rather than overflowing the window.
+
+## Observing a run through the ledger
+
+Every agent owns a `RunLedger`. Subscribe to its `RunEvent` stream to render
+incremental output and track progress. `agent.subscribe(handler)` taps the same
+stream and returns a disposer.
+
+```typescript
+const agent = createAgent({ model: "claude-sonnet-4" });
+
+const unsubscribe = agent.subscribe((event) => {
+  switch (event.kind) {
+    case "text_delta":
+      process.stdout.write(event.delta);
+      break;
+    case "tool_started":
+      console.log(`\n[tool] ${event.name} started`);
+      break;
+    case "tool_finished":
+      console.log(`[tool] ${event.name} finished`);
+      break;
+    case "settled":
+      console.log(`\n[done] ${event.snapshot.messages.length} turns`);
+      break;
+    case "faulted":
+      console.error(`\n[fault] ${event.error.kind}`);
+      break;
+  }
 });
 
-const memory = new Memory({
-  vector: vectorStore,
-  embedder: embedder,
-  options: {
-    semanticRecall: {
-      enabled: true,
-      topK: 5,
-      threshold: 0.7,
-    },
+await agent.submit("List the files in src/runtime.");
+unsubscribe();
+```
+
+If you want only "where is the run right now" rather than the raw stream, attach
+a `SnapshotAccumulator` to a `RunLedger` and read `getSnapshot()`. Note that
+`RunLedger` and `SnapshotAccumulator` are internal to the runtime package and are
+not re-exported from a public subpath; the example below illustrates their shape
+for hosts working inside the runtime.
+
+```typescript
+// Internal usage (src/runtime/ledger):
+import { RunLedger, SnapshotAccumulator } from "./ledger";
+
+const ledger = new RunLedger();
+const acc = new SnapshotAccumulator();
+const detach = acc.attach(ledger);
+
+// ...the loop publishes events to `ledger`...
+
+const current = acc.getSnapshot(); // most recent RunSnapshot, or undefined
+detach();
+```
+
+Snapshot-bearing events (`snapshot`, `settled`, `faulted`) advance the
+accumulator; delta and tool-lifecycle events are ignored by it.
+
+## Persisting and resuming sessions
+
+Pass a `SessionStore` as `deps.store` and the conductor writes settled history to
+disk; later you can `resume` an agent from a session id. The store is honoured
+only when it is a real `SessionStore` instance (the `deps.store` field is typed
+`unknown` and `instanceof`-checked).
+
+```typescript
+// Internal usage (src/runtime/store):
+import { SessionStore } from "./store";
+
+const store = new SessionStore("/tmp/indusagi-sessions");
+
+const agent = createAgent({ model: "claude-sonnet-4" }, { store });
+await agent.submit("Start a new task.");
+
+// Later, in a fresh agent over the same store:
+const resumed = createAgent({ model: "claude-sonnet-4" }, { store });
+await resumed.resume(sessionId); // rehydrates messages from the persisted DAG
+```
+
+On disk each session is one append-only JSONL file `<root>/<sessionId>.jsonl`.
+Every line is one record: a node record (`{ type: "node", node }`) or a head
+marker (`{ type: "head", leaf }`). The last head marker names the live leaf.
+
+## The pieces in isolation
+
+These are internal helpers. Hosts working inside the runtime can use them
+directly; downstream consumers reach them only via `createAgent`.
+
+### Estimating token footprint
+
+```typescript
+import { estimateContextTokens } from "./memory";
+
+const tokens = estimateContextTokens(snapshot.messages);
+```
+
+### Deciding and performing a condensation
+
+```typescript
+import { shouldCompact, findCutPoint, compact } from "./memory";
+
+if (shouldCompact(messages, modelCard, { triggerRatio: 0.8, keepRecent: 8 })) {
+  const cut = findCutPoint(messages, 8); // 0 = nothing to drop
+  const condensed = await compact(
+    messages,
+    modelCard,
+    { triggerRatio: 0.8, keepRecent: 8 },
+    invokeModel, // a ModelInvoker
+  );
+  // condensed === [summaryTurn, ...recentTail]
+}
+```
+
+`compact` is safe to call unconditionally: when the cut point is `0` it returns
+the original `messages` unchanged.
+
+### Building a session graph by hand
+
+```typescript
+import { SessionGraph } from "./store";
+
+const graph = new SessionGraph("session-42");
+const a = graph.append({ role: "user", blocks: [{ kind: "text", text: "hi" }] });
+const b = graph.append({ role: "assistant", blocks: [{ kind: "text", text: "hello" }] });
+
+graph.leaf;          // b.id (the current head)
+graph.pathTo(b.id);  // [turnA, turnB] in root→leaf order
+
+// Fork a new line of history from an earlier node:
+graph.branchFrom(a.id);
+const c = graph.append({ role: "user", blocks: [{ kind: "text", text: "again" }] });
+// a now has two children (b and c)
+
+// Re-enter at a chosen tip:
+const context = graph.resume(b.id); // positions head at b and returns its path
+```
+
+Node ids are content hashes (`hashNode`): appending an identical turn with the
+same lineage and timestamp collapses to the same node rather than duplicating it.
+
+## Schema migration on load
+
+`SessionStore` accepts an ordered list of `Migrator`s. Each migrator's `upgrade`
+runs on every raw decoded record at load time, in sequence, so older on-disk
+schemas upgrade forward transparently.
+
+```typescript
+import { SessionStore } from "./store";
+import type { Migrator } from "./contract"; // src/runtime/contract/session.ts
+
+const renameField: Migrator = {
+  id: "2026-06-rename-leaf",
+  upgrade(raw) {
+    // Transform one raw record one schema version forward, then return it.
+    return raw;
   },
-});
+};
+
+const store = new SessionStore("/var/lib/indusagi/sessions", [renameField]);
+const graph = await store.loadSession("session-42");
 ```
 
-### 2. Storage - Persist Data
-
-Store messages and threads persistently.
-
-**Import:**
-```typescript
-import { InMemoryStorage, type MemoryStorage } from "indusagi/memory";
-```
-
-**Creating storage:**
-```typescript
-// In-memory storage (default, no persistence)
-const storage = new InMemoryStorage();
-
-// Store a message
-await storage.createMessage({
-  threadId: "thread-123",
-  content: "Hello, world!",
-  role: "user",
-  timestamp: new Date(),
-});
-
-// List messages
-const messages = await storage.listMessages({
-  threadId: "thread-123",
-  limit: 10,
-});
-```
-
-**Storage operations:**
-```typescript
-// Create thread
-await storage.createThread({
-  id: "thread-123",
-  metadata: { projectId: "proj-1" },
-});
-
-// Update message
-await storage.updateMessage("message-123", {
-  content: "Updated content",
-});
-
-// Delete message
-await storage.deleteMessage("message-123");
-
-// Get messages with pagination
-const result = await storage.listMessages({
-  threadId: "thread-123",
-  limit: 20,
-  offset: 0,
-  orderBy: [{ field: "timestamp", direction: "desc" }],
-});
-```
-
-### 3. Vector Store - Semantic Search
-
-Enable semantic search through embeddings.
-
-**Import:**
-```typescript
-import { InMemoryVectorStore, type VectorStore } from "indusagi/memory";
-```
-
-**Creating vector store:**
-```typescript
-const vectorStore = new InMemoryVectorStore();
-
-// Create index
-await vectorStore.createIndex({
-  name: "memories",
-  dimension: 1536, // OpenAI embedding dimension
-});
-
-// Upsert vectors
-await vectorStore.upsertVectors({
-  indexName: "memories",
-  vectors: [
-    {
-      id: "msg-1",
-      vector: [...], // 1536 dimensions
-      metadata: { threadId: "thread-1" },
-    },
-  ],
-});
-
-// Query vectors (semantic search)
-const results = await vectorStore.queryVectors({
-  indexName: "memories",
-  vector: [...], // Query embedding
-  limit: 5,
-  threshold: 0.7,
-});
-```
-
-### 4. Embedder - Convert Text to Vectors
-
-**Import:**
-```typescript
-import { OpenAIEmbedder, createOpenAIEmbedder, type Embedder } from "indusagi/memory";
-```
-
-**Creating embedder:**
-```typescript
-const embedder = createOpenAIEmbedder({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: "text-embedding-3-small", // or "text-embedding-3-large"
-});
-
-// Embed text
-const embedding = await embedder.embed("Hello, world!");
-console.log(embedding); // [0.123, -0.456, ..., 0.789]
-
-// Embed multiple texts
-const embeddings = await embedder.embedBatch([
-  "First text",
-  "Second text",
-  "Third text",
-]);
-```
-
-### 5. Processors - Memory Processors
-
-#### WorkingMemory - Short-term Context
-
-**Import:**
-```typescript
-import { WorkingMemory, type WorkingMemoryProcessorConfig } from "indusagi/memory";
-```
-
-**Creating working memory:**
-```typescript
-const workingMemory = new WorkingMemory({
-  storage,
-  scope: "resource", // scoped to a resource
-});
-
-// Process (update working memory)
-const result = await workingMemory.process({
-  role: "assistant",
-  content: "Let me update the context with important details",
-  threadId: "thread-1",
-  resourceId: "resource-1",
-});
-```
-
-**Update working memory tool:**
-```typescript
-import { createUpdateWorkingMemoryTool } from "indusagi/memory";
-
-const tool = createUpdateWorkingMemoryTool(memory);
-
-// Use in agent
-registry.register(tool);
-```
-
-#### SemanticRecall - Semantic Search
-
-**Import:**
-```typescript
-import { SemanticRecall, type SemanticRecallProcessorConfig } from "indusagi/memory";
-```
-
-**Creating semantic recall:**
-```typescript
-const semanticRecall = new SemanticRecall({
-  storage,
-  vector: vectorStore,
-  embedder,
-  indexName: "memories",
-  topK: 5,
-  threshold: 0.7,
-  scope: "resource",
-});
-
-// Process (search and retrieve)
-const result = await semanticRecall.process({
-  role: "user",
-  content: "Help me with the project I was working on",
-  threadId: "thread-1",
-  resourceId: "resource-1",
-});
-
-console.log(result.relevantMessages); // Semantically similar past messages
-```
-
-#### MessageHistory - Conversation History
-
-**Import:**
-```typescript
-import { MessageHistory, type MessageHistoryProcessorConfig } from "indusagi/memory";
-```
-
-**Creating message history:**
-```typescript
-const messageHistory = new MessageHistory({
-  storage,
-  limit: 10, // Keep last 10 messages
-});
-
-// Process (get message history)
-const result = await messageHistory.process({
-  threadId: "thread-1",
-});
-
-console.log(result.messages); // Last 10 messages
-```
-
-#### ObservationalMemory - Advanced Observations
-
-**Import:**
-```typescript
-import {
-  ObservationalMemory,
-  type ObservationalMemoryProcessorConfig,
-} from "indusagi/memory";
-```
-
-**Creating observational memory:**
-```typescript
-const observationalMemory = new ObservationalMemory({
-  storage,
-  vector: vectorStore,
-  embedder,
-  config: {
-    enabled: true,
-    extractionModel: "gpt-4",
-    compressionModel: "gpt-4",
-  },
-});
-
-// Process (extract observations)
-const result = await observationalMemory.process({
-  threadId: "thread-1",
-  role: "assistant",
-  content: "The user prefers TypeScript for projects",
-});
-
-console.log(result.extractedObservations);
-```
-
-## Complete Example
-
-```typescript
-import { Memory, InMemoryStorage, InMemoryVectorStore, createOpenAIEmbedder } from "indusagi/memory";
-
-// Setup
-const storage = new InMemoryStorage();
-const vectorStore = new InMemoryVectorStore();
-const embedder = createOpenAIEmbedder({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Create memory system
-const memory = new Memory({
-  storage,
-  vector: vectorStore,
-  embedder,
-  options: {
-    workingMemory: { enabled: true, scope: "resource" },
-    semanticRecall: { enabled: true, topK: 5, threshold: 0.7 },
-    lastMessages: 10,
-  },
-});
-
-// Create thread
-await storage.createThread({ id: "user-123" });
-
-// Add a message
-await memory.addMessage({
-  threadId: "user-123",
-  role: "user",
-  content: "I prefer TypeScript and functional programming",
-  type: "text",
-});
-
-// Retrieve context for a new message
-const context = await memory.getContext({
-  threadId: "user-123",
-});
-
-console.log("Working Memory:", context.workingMemory);
-console.log("Relevant History:", context.messageHistory);
-console.log("Semantic Matches:", context.semanticMatches);
-```
-
-## API Reference
-
-### Memory
-
-```typescript
-class Memory {
-  constructor(options: SharedMemoryConfig);
-  
-  // Message operations
-  addMessage(input: AddMessageInput): Promise<void>;
-  getMessages(input: GetMessagesInput): Promise<CoreMessage[]>;
-  
-  // Thread operations
-  createThread(id: string, metadata?: Record<string, any>): Promise<void>;
-  getThreads(): Promise<StorageThreadType[]>;
-  
-  // Context retrieval
-  getContext(input: GetContextInput): Promise<MemoryContext>;
-  
-  // Working memory
-  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
-  getWorkingMemory(threadId: string): Promise<WorkingMemoryTemplate>;
-  
-  // Semantic search
-  searchSemantic(query: string, limit?: number): Promise<SearchResult[]>;
-}
-```
-
-### Storage
-
-```typescript
-interface MemoryStorage {
-  createMessage(input: CreateMessageInput): Promise<void>;
-  updateMessage(id: string, input: UpdateMessageInput): Promise<void>;
-  deleteMessage(id: string): Promise<void>;
-  
-  listMessages(input: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
-  
-  createThread(input: CreateThreadInput): Promise<void>;
-  listThreads(input: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
-  
-  // Working memory
-  updateWorkingMemory(input: UpdateWorkingMemoryInput): Promise<void>;
-  getWorkingMemory(id: string): Promise<WorkingMemoryTemplate | null>;
-  
-  // Observations
-  createObservations(input: CreateObservationsInput): Promise<void>;
-  listObservations(threadId: string): Promise<ObservationalMemoryRecord[]>;
-}
-```
-
-### VectorStore
-
-```typescript
-interface VectorStore {
-  createIndex(params: CreateIndexParams): Promise<void>;
-  
-  upsertVectors(params: UpsertVectorParams): Promise<void>;
-  updateVector(params: UpdateVectorParams): Promise<void>;
-  deleteVector(params: DeleteVectorParams): Promise<void>;
-  
-  queryVectors(params: QueryVectorParams): Promise<VectorQueryResult[]>;
-  
-  getStats(indexName: string): Promise<IndexStats>;
-}
-```
-
-### Embedder
-
-```typescript
-interface Embedder {
-  embed(text: string): Promise<number[]>;
-  embedBatch(texts: string[]): Promise<number[][]>;
-  getDimension(): number;
-}
-```
-
-## Configuration Options
-
-```typescript
-interface MemoryConfig {
-  // Working memory settings
-  workingMemory?: {
-    enabled?: boolean;
-    scope?: "global" | "resource";
-    maxSize?: number;
-  };
-  
-  // Semantic recall settings
-  semanticRecall?: {
-    enabled?: boolean;
-    topK?: number;
-    threshold?: number;
-    messageRange?: number;
-    scope?: "global" | "resource";
-  };
-  
-  // Message history settings
-  lastMessages?: number; // Keep last N messages
-  
-  // Observational memory settings
-  observational?: {
-    enabled?: boolean;
-    extractionModel?: string;
-    compressionModel?: string;
-  };
-}
-```
-
-## Advanced Usage
-
-### Custom Storage Implementation
-
-```typescript
-import { MemoryStorage } from "indusagi/memory";
-
-class CustomStorage implements MemoryStorage {
-  async createMessage(input) {
-    // Your custom implementation
-  }
-  
-  async listMessages(input) {
-    // Your custom implementation
-  }
-  
-  // ... implement other methods
-}
-
-const memory = new Memory({
-  storage: new CustomStorage(),
-});
-```
-
-### Custom Embedder
-
-```typescript
-import { Embedder } from "indusagi/memory";
-
-class CustomEmbedder implements Embedder {
-  async embed(text: string) {
-    // Call your embedding service
-    return [...]; // 1536 dimensions
-  }
-  
-  async embedBatch(texts: string[]) {
-    return texts.map(t => this.embed(t));
-  }
-  
-  getDimension() {
-    return 1536;
-  }
-}
-```
-
-## Performance Optimization
-
-### Caching Embeddings
-
-```typescript
-class CachedEmbedder {
-  private cache = new Map<string, number[]>();
-  
-  async embed(text: string) {
-    if (this.cache.has(text)) {
-      return this.cache.get(text)!;
-    }
-    
-    const embedding = await this.baseEmbedder.embed(text);
-    this.cache.set(text, embedding);
-    return embedding;
-  }
-}
-```
-
-### Batch Processing
-
-```typescript
-// Process multiple messages efficiently
-const messages = [...];
-const embeddings = await embedder.embedBatch(
-  messages.map(m => m.content)
-);
-
-// Upsert all at once
-await vectorStore.upsertVectors({
-  indexName: "memories",
-  vectors: messages.map((m, i) => ({
-    id: m.id,
-    vector: embeddings[i],
-    metadata: { threadId: m.threadId },
-  })),
-});
-```
-
-## Troubleshooting
-
-### Memory Not Persisting
-
-Ensure you're using a persistent storage backend:
-
-```typescript
-// DON'T: This doesn't persist
-const memory = new Memory();
-
-// DO: Use persistent storage
-const storage = new CustomPersistentStorage();
-const memory = new Memory({ storage });
-```
-
-### Slow Semantic Search
-
-```typescript
-// Check vector store stats
-const stats = await vectorStore.getStats("memories");
-console.log(`Total vectors: ${stats.vectorCount}`);
-
-// Consider increasing threshold to filter results
-const results = await semanticRecall.process({
-  // ... with threshold: 0.8 (more selective)
-});
-```
-
-### Embeddings Not Matching
-
-Verify you're using consistent embedder:
-
-```typescript
-// Make sure same embedder for indexing and querying
-const embedder = createOpenAIEmbedder({ ... });
-
-// Use same embedder everywhere
-const memory = new Memory({ embedder });
-const semanticRecall = new SemanticRecall({ embedder });
-```
+A record that does not narrow to a `{ type: "node" | "head" }` shape after
+migration is skipped. A missing session file yields an empty `SessionGraph`.
+
+## Notes and limits
+
+- `indusagi/memory` ships **no** runtime symbols. Do not import values from it.
+- There is **no** semantic search, embeddings, vector store, working-memory
+  processor, or observational memory in this codebase. The only context strategy
+  is heuristic condensation.
+- The token estimate is a coarse character-count heuristic, not provider-exact.
+- `RunLedger`, `SnapshotAccumulator`, `SessionStore`, `SessionGraph`, `hashNode`,
+  and the compactor functions are **internal** to the runtime package: they are
+  consumed by `createAgent` and are not exported under a public `indusagi/*`
+  subpath. Downstream code configures them through `AgentConfig.compaction` and
+  the `deps` (`store`, `ledger`, `invokeModel`) passed to `createAgent`.
+- `RunLedger` delivery is synchronous and isolates throwing subscribers; a
+  handler that throws does not break fan-out to the others.
 
 ---
 
-**Version**: 0.12.15  
-**Last Updated**: March 2026  
-**Status**: · Production Ready
+**Module**: `indusagi/memory` (phantom facade) · runtime: `indusagi/runtime`
+**Status**: Context-management machinery is internal to the runtime

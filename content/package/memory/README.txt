@@ -1,95 +1,110 @@
 # Memory Module Overview
 
-The Memory module provides intelligent context management with semantic understanding, persistent storage, and multiple memory processors for indusagi agents.
+> `indusagi/memory` is a phantom facade. It carries no runtime exports — the real
+> memory machinery (context condensation, the run event ledger, and the session
+> store) lives under `indusagi`'s runtime and is reached through `indusagi/runtime`.
 
-Primary entrypoint: `indusagi/memory`.
+The "memory" concern in the clean-room rebuild is the management of a run's
+*context*: deciding when an agent's accumulated history is too large for the
+model window and condensing it, fanning run progress out to hosts, and durably
+storing branchable session history on disk. None of this is exposed as a
+standalone `Memory` class. It is wired into the agent runtime and driven
+automatically by `createAgent`.
 
-## Directory Map
+The `indusagi/memory` subpath resolves but ships nothing — its module is
+literally `export {}`, with no value or type exports. The machinery that does
+the work is internal to `indusagi/runtime` and is driven through `createAgent`.
 
-- `indusagi/src/memory/index.ts` - Public exports and main API
-- `indusagi/src/memory/memory.ts` - Main Memory orchestrator class
-- `indusagi/src/memory/storage/base.ts` - MemoryStorage interface
-- `indusagi/src/memory/storage/inmemory.ts` - InMemoryStorage implementation
-- `indusagi/src/memory/vector/base.ts` - VectorStore interface
-- `indusagi/src/memory/vector/inmemory.ts` - InMemoryVectorStore implementation
-- `indusagi/src/memory/embedder/base.ts` - Embedder interface
-- `indusagi/src/memory/embedder/openai.ts` - OpenAI embeddings
-- `indusagi/src/memory/processors/` - Memory processors (Working, Semantic, History, Observational)
-- `indusagi/src/memory/types.ts` - Protocol definitions
+## What `indusagi/memory` actually exports
 
-## Conceptual Flow
+The module at `src/facade/memory.ts` is:
 
-1. Create a Memory instance with desired processors
-2. Configure storage, vector store, and embedder
-3. Create threads for user conversations
-4. Add messages to memory as conversations happen
-5. Retrieve context using processors (working memory, semantic search, history)
-6. Update working memory with important context
-7. Search semantically through past conversations
+```typescript
+// indusagi/memory phantom facade (consumer imports a JSDoc-only type)
+export {};
+```
 
-## What This Module Does
+It is a deliberate placeholder. It exists so the `indusagi/memory` subpath
+resolves, but it re-exports nothing at runtime. Importing values from it will
+fail — there are no `Memory`, `InMemoryStorage`, `VectorStore`, `Embedder`,
+processor classes, or embedding functions in this codebase. See `gaps` notes in
+the build log: those symbols described by older drafts do not exist.
 
-- Stores conversation messages persistently
-- Provides semantic search through embeddings
-- Maintains working memory (short-term context)
-- Tracks message history for conversation context
-- Extracts and compresses observations
-- Integrates with OpenAI embeddings
-- Supports custom storage and embedder implementations
+## Where the real machinery lives
 
-## Core Features
+The work the word "memory" implies is split across three internal runtime
+directories. They are consumed by the conductor (`createAgent`), not exported as
+their own package subpath.
 
-- **Memory Orchestrator** - Central class managing all processors
-- **Working Memory** - Short-term context storage
-- **Semantic Recall** - Vector-based semantic search
-- **Message History** - Conversation history management
-- **Observational Memory** - Advanced observation extraction
-- **Multiple Processors** - Combine different memory strategies
-- **Flexible Storage** - Pluggable storage backends
-- **Vector Search** - In-memory or custom vector stores
-- **Embeddings** - OpenAI or custom embedders
+| Concern | Source directory | Role |
+|---------|------------------|------|
+| Context condensation | `src/runtime/memory/` | Estimate token footprint; condense old history into one summary turn while keeping a recent tail verbatim |
+| Run event ledger | `src/runtime/ledger/` | Fan published run events out to subscribers; accumulate the latest snapshot |
+| Session store | `src/runtime/store/` | Content-addressed, branchable session DAG persisted as JSONL on disk |
 
-## Memory Processors
+## Conceptual flow
 
-- **WorkingMemory** - Stores scoped context (global or per-resource)
-- **SemanticRecall** - Searches semantically similar past messages
-- **MessageHistory** - Retrieves last N messages in conversation
-- **ObservationalMemory** - Extracts and compresses key observations
+1. A host builds an agent with `createAgent(config, deps)` from `indusagi/runtime`.
+2. As the conversation grows, before each model call the conductor estimates the
+   history's token footprint (`estimateContextTokens`) and, if it crosses
+   `config.compaction.triggerRatio` of the model window (`shouldCompact`),
+   condenses the oldest prefix into a single distilled turn (`compact`),
+   preserving the most recent `keepRecent` turns verbatim.
+3. Each step of the run publishes a `RunEvent` through a `RunLedger`; a
+   `SnapshotAccumulator` can fold those into "where is the run right now".
+4. If a `SessionStore` is injected, settled turns are appended to an on-disk
+   JSONL session file as content-addressed nodes, so a later agent can `resume`
+   the session by id.
+
+## What this module does (accurately)
+
+- Reserves the `indusagi/memory` subpath without shipping any runtime symbols.
+- Documents the relationship between context condensation, the event ledger, and
+  the session store — all internal to the runtime.
+
+## What it does NOT do
+
+- No semantic search, embeddings, or vector store.
+- No `Memory` orchestrator class, no message/thread CRUD, no working-memory
+  processors, no observational memory.
+- No `MEMORY_*` environment variables and no pluggable storage backends keyed by
+  env. The only knobs are the `CompactionPolicy` fields on `AgentConfig`.
+
+## Core internal components
+
+- **Token estimator** (`estimateContextTokens`) — a cheap character-count
+  heuristic (~4 chars/token plus a small per-turn surcharge), no real tokenizer.
+- **Compactor** (`shouldCompact`, `findCutPoint`, `summarize`, `compact`) — the
+  four-part condensation flow: decide, locate a tool-safe cut, distill, stitch.
+- **RunLedger** — synchronous fan-out of `RunEvent`s to subscribers.
+- **SnapshotAccumulator** — remembers only the most recent `RunSnapshot`.
+- **SessionGraph** / **SessionStore** / **hashNode** — the in-memory DAG, its
+  JSONL persistence, and content addressing.
 
 ## Documentation
 
-For detailed information, see:
+- [API Reference](/docs/memory/api-reference) — the exact public symbol
+  surface of `indusagi/memory` and the internal symbols of the runtime memory
+  directories.
+- [Developer Guide](/docs/memory/developer-guide) — how condensation,
+  the ledger, and the store are configured and driven through `createAgent`.
 
-- `indusagi/docs/memory/developer-guide.md` - Complete API and usage guide
-- `indusagi/docs/mcp/integration.md` - Integration with MCP and Agents
-- `indusagi/docs/getting-started.md` - Quick start guide
+## Quick example
 
-## Quick Example
+`indusagi/memory` exports no values, so there is nothing to import from it
+directly. The memory behaviour is configured through the runtime:
 
 ```typescript
-import { Memory, InMemoryStorage, InMemoryVectorStore, createOpenAIEmbedder } from "indusagi/memory";
+import { createAgent } from "indusagi/runtime";
+import type { AgentConfig } from "indusagi/runtime";
 
-const memory = new Memory({
-  storage: new InMemoryStorage(),
-  vector: new InMemoryVectorStore(),
-  embedder: createOpenAIEmbedder({
-    apiKey: process.env.OPENAI_API_KEY,
-  }),
-  options: {
-    semanticRecall: { enabled: true, topK: 5 },
-    workingMemory: { enabled: true, scope: "resource" },
-    lastMessages: 10,
-  },
-});
+const config: AgentConfig = {
+  model: "claude-sonnet-4",
+  // Condense history once it reaches 80% of the window; keep the last 8 turns.
+  compaction: { triggerRatio: 0.8, keepRecent: 8 },
+};
 
-// Add a message
-await memory.addMessage({
-  threadId: "user-123",
-  role: "user",
-  content: "I prefer TypeScript and functional programming",
-  type: "text",
-});
-
-// Get context for new message
-const context = await memory.getContext({ threadId: "user-123" });
+const agent = createAgent(config);
+const snapshot = await agent.submit("Summarize the repository layout.");
+console.log(snapshot.phase, snapshot.messages.length);
 ```

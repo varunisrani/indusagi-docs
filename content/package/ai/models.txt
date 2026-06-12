@@ -1,39 +1,66 @@
 # Models and Registry
 
-Models are defined in `indusagi/src/ai/models.generated.ts` and loaded into an in-memory registry in `indusagi/src/ai/models.ts`.
+Models are defined in `src/facade/ml/models.generated.ts` and loaded into an
+in-memory registry in `src/facade/ml/models.ts`.
 
 ## Model Structure
 
-Each `Model<TApi>` includes:
+Each `Model<TApi>` (from `src/facade/ml/types.ts`) includes:
 
 - `id` and `name`
 - `api` and `provider`
 - `baseUrl`
-- `reasoning` support flag
-- `input` types (`text`, `image`)
-- `cost` per million tokens for input, output, cache read, cache write
+- `reasoning` (boolean support flag)
+- `input` types — an array of `"text"` and/or `"image"`
+- `cost` per million tokens: `input`, `output`, `cacheRead`, `cacheWrite`
 - `contextWindow` and `maxTokens`
-- Optional `headers` and `compat`
+- optional `headers`
+- optional `compat` (only for `openai-completions` / `openai-responses` APIs)
 
 ## Registry Functions
 
-- `getModel(provider, modelId)` returns a single model by provider and ID.
+- `getModel(provider, modelId)` returns a single model, throwing if unknown.
+- `tryGetModel(provider, modelId)` returns the model or `undefined`.
 - `getModels(provider)` returns all models for a provider.
-- `getProviders()` returns known provider names.
+- `getProviders()` returns the catalog's provider names.
+- `findModels(filters?)` filters by `provider`, `api`, `reasoning`,
+  `supportsImageInput`, and `nameIncludes`.
+- `registerCustomModel(model)` adds one model; `loadCustomModels(models)` adds many.
+
+These delegate to the shared `modelRegistry` singleton (an instance of the
+exported `ModelRegistry` class). You can also construct your own `ModelRegistry`
+with a custom seed.
+
+```ts
+import { findModels } from "indusagi/ai";
+
+const reasoningModels = findModels({ reasoning: true, supportsImageInput: true });
+```
 
 ## Cost Calculation
 
-`calculateCost(model, usage)` mutates and returns `usage.cost`:
+- `estimateCost(model, { inputTokens, outputTokens, cacheReadTokens?, cacheWriteTokens? })`
+  returns a `{ input, output, cacheRead, cacheWrite, total }` breakdown.
+- `calculateCost(model, usage)` mutates and returns `usage.cost`, computing each
+  component from the per-million `model.cost` rates.
 
-- Computes cost based on model rates and usage tokens.
-- Handles cache read and cache write separately.
+Cache reads and cache writes are priced separately from input and output tokens.
 
 ## Reasoning Levels
 
-`supportsXhigh(model)` returns true for specific OpenAI Codex models.
-Other providers clamp `xhigh` to `high`.
+- `supportsXhigh(model)` returns `true` only for `gpt-5.1-codex-max`, `gpt-5.2`,
+  and `gpt-5.2-codex`.
+- Providers that do not support `"xhigh"` clamp it to `"high"` (see
+  `clampReasoning` in [Streaming Model](/docs/ai/streaming)).
+
+## Comparing Models
+
+`modelsAreEqual(a, b)` returns `true` when both models share the same `id` and
+`provider` (and both are non-null).
 
 ## Compatibility Overrides
 
-`Model.compat` allows overriding behavior for OpenAI-compatible providers.
-See `indusagi/docs/ai/providers.md` for the full compatibility fields.
+`Model.compat` overrides endpoint behavior for OpenAI-compatible providers. It is
+typed as `OpenAICompletionsCompat` for the `openai-completions` API and
+`OpenAIResponsesCompat` for `openai-responses`. See [AI Providers](/docs/ai/providers)
+for the full field list.

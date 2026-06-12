@@ -1,177 +1,92 @@
 # Settings
 
-Indusagi uses JSON settings files with project settings overriding global settings.
+Indusagi reads JSON settings from two tiers. A read layers the project file over the global file over the built-in defaults, so a key set in the project file wins, then the global file, then the default.
 
 | Location | Scope |
 |----------|-------|
 | `~/.indusagi/agent/settings.json` | Global (all projects) |
-| `.indusagi/settings.json` | Project (current directory) |
+| `.indusagi/settings.json` | Project (resolved against the working directory) |
 
-Edit directly or use `/settings` for common options.
+A write through `/settings` (or a manual edit) lands in the **project** file only; the global file is never rewritten for you. A missing or malformed file degrades to the empty record rather than failing startup. Set `INDUSAGI_CODING_AGENT_DIR` to relocate the profile directory that holds the global file.
+
+Edit the files directly, or use `/settings` in an interactive session for the common options.
 
 ## All Settings
 
-### Model & Thinking
+Every key below is optional. The default is the value used when neither tier supplies the key.
+
+### Model & Reasoning
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `defaultProvider` | string | - | Default provider (e.g., `"anthropic"`, `"openai"`) |
-| `defaultModel` | string | - | Default model ID |
-| `defaultThinkingLevel` | string | - | `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` |
-| `hideThinkingBlock` | boolean | `false` | Hide thinking blocks in output |
-| `thinkingBudgets` | object | - | Custom token budgets per thinking level |
-
-#### thinkingBudgets
+| `defaultProvider` | string | `"anthropic"` | Provider the session defaults to when none is named |
+| `defaultModel` | string | `""` | Model id the session opens with under `defaultProvider` |
+| `defaultThinkingLevel` | string | `"medium"` | Reasoning effort: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` |
+| `enabledModels` | string[] | `[]` | Glob / id patterns selecting which models appear in the picker; empty means all |
 
 ```json
 {
-  "thinkingBudgets": {
-    "minimal": 1024,
-    "low": 4096,
-    "medium": 10240,
-    "high": 32768
-  }
-}
-```
-
-### UI & Display
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `theme` | string | `"dark"` | Theme name (`"dark"`, `"light"`, or custom) |
-| `quietStartup` | boolean | `false` | Hide startup header |
-| `collapseChangelog` | boolean | `false` | Show condensed changelog after updates |
-| `doubleEscapeAction` | string | `"tree"` | Action for double-escape: `"tree"` or `"fork"` |
-| `editorPaddingX` | number | `0` | Horizontal padding for input editor (0-3) |
-| `showHardwareCursor` | boolean | `false` | Show terminal cursor |
-
-### Compaction
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `compaction.enabled` | boolean | `true` | Enable auto-compaction |
-| `compaction.reserveTokens` | number | `16384` | Tokens reserved for LLM response |
-| `compaction.keepRecentTokens` | number | `20000` | Recent tokens to keep (not summarized) |
-
-```json
-{
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 16384,
-    "keepRecentTokens": 20000
-  }
-}
-```
-
-### Branch Summary
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `branchSummary.reserveTokens` | number | `16384` | Tokens reserved for branch summarization |
-
-### Retry
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `retry.enabled` | boolean | `true` | Enable automatic retry on transient errors |
-| `retry.maxRetries` | number | `3` | Maximum retry attempts |
-| `retry.baseDelayMs` | number | `2000` | Base delay for exponential backoff (2s, 4s, 8s) |
-
-```json
-{
-  "retry": {
-    "enabled": true,
-    "maxRetries": 3,
-    "baseDelayMs": 2000
-  }
-}
-```
-
-### Message Delivery
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `steeringMode` | string | `"one-at-a-time"` | How steering messages are sent: `"all"` or `"one-at-a-time"` |
-| `followUpMode` | string | `"one-at-a-time"` | How follow-up messages are sent: `"all"` or `"one-at-a-time"` |
-
-### Terminal & Images
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `terminal.showImages` | boolean | `true` | Show images in terminal (if supported) |
-| `terminal.startupImage` | string | - | Path to an image displayed at startup (interactive mode only) |
-| `images.autoResize` | boolean | `true` | Resize images to 2000x2000 max |
-| `images.blockImages` | boolean | `false` | Block all images from being sent to LLM |
-
-Paths in `terminal.startupImage` follow the same resolution rules as other settings: global settings resolve relative to `~/.indusagi/agent`, project settings resolve relative to `.indusagi` (absolute paths and `~` are supported).
-
-### Shell
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `shellPath` | string | - | Custom shell path (e.g., for Cygwin on Windows) |
-| `shellCommandPrefix` | string | - | Prefix for every bash command (e.g., `"shopt -s expand_aliases"`) |
-
-### Model Cycling
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `enabledModels` | string[] | - | Model patterns for Ctrl+P cycling (same format as `--models` CLI flag) |
-
-```json
-{
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultThinkingLevel": "medium",
   "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"]
 }
 ```
 
-### Markdown
+### Reasoning Display
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `markdown.codeBlockIndent` | string | `"  "` | Indentation for code blocks |
+| `showReasoning` | boolean | `true` | Show the model's reasoning text as it streams |
+| `hideThinking` | boolean | `false` | Fold the reasoning block away even when the model emits one |
 
-### Resources
-
-These settings define where to load extensions, skills, prompts, and themes from.
-
-Paths in `~/.indusagi/agent/settings.json` resolve relative to `~/.indusagi/agent`. Paths in `.indusagi/settings.json` resolve relative to `.indusagi`. Absolute paths and `~` are supported.
+### Images
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `packages` | array | `[]` | npm/git packages to load resources from |
-| `extensions` | string[] | `[]` | Local extension file paths or directories |
-| `skills` | string[] | `[]` | Local skill file paths or directories |
-| `prompts` | string[] | `[]` | Local prompt template paths or directories |
-| `themes` | string[] | `[]` | Local theme file paths or directories |
-| `enableSkillCommands` | boolean | `true` | Register skills as `/skill:name` commands |
+| `showImages` | boolean | `true` | Render inline image content in the transcript |
+| `imageAutoResize` | boolean | `true` | Shrink oversized images to fit before sending to a provider |
+| `blockImages` | boolean | `false` | Withhold image content from providers entirely |
 
-Arrays support glob patterns and exclusions. Use `!pattern` to exclude. Use `+path` to force-include an exact path and `-path` to force-exclude an exact path.
+### Console & Display
 
-#### packages
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `colourScheme` | string | `"default"` | Named colour scheme the console renders with |
+| `quietStartup` | boolean | `false` | Suppress the banner / tips on a normal interactive launch |
+| `collapseChangelog` | boolean | `false` | Prefer a condensed changelog after the console updates itself |
+| `showHardwareCursor` | boolean | `false` | Reveal the terminal's own cursor instead of the drawn caret |
+| `editorPaddingX` | number | `1` | Horizontal padding, in columns, around the prompt editor |
+| `logoSweep` | boolean | `false` | Static colour-sweep flourish tinting the startup wordmark |
+| `reducedMotion` | boolean | `false` | Suppress motion-flavoured flourishes (e.g. the logo sweep) |
+| `lastSeenVersion` | string | `""` | Last product version whose full masthead was shown; managed automatically |
 
-String form loads all resources from a package:
+### Input & Steering
 
-```json
-{
-  "packages": ["indusagi-skills", "@org/my-extension"]
-}
-```
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `doubleEscapeAction` | string | `"clear"` | What a double-escape does: `"tree"`, `"fork"`, or `"clear"` |
+| `steeringMode` | string | `"all"` | How queued steering corrections drain: `"all"` or `"one-at-a-time"` |
+| `followUpMode` | string | `"all"` | How queued follow-up prompts drain: `"all"` or `"one-at-a-time"` |
 
-Object form filters which resources to load:
+> The legacy `doubleEscapeAction` values `"rewind"` and `"branch"` are still accepted and treated as `"fork"` and `"tree"` respectively.
 
-```json
-{
-  "packages": [
-    {
-      "source": "indusagi-skills",
-      "skills": ["brave-search", "transcribe"],
-      "extensions": []
-    }
-  ]
-}
-```
+### Context Window
 
-See [packages.md](packages.md) for package management details.
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `autoCompact` | boolean | `true` | Let the window-budget manager compact the transcript automatically |
+
+See [Compaction](compaction.md).
+
+### Extensions & Skills
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `extensionPackages` | string[] | `[]` | Extension-package sources the launcher installs and loads (npm / git / local) |
+| `enableSkillCommands` | boolean | `true` | Surface discovered skills as their own slash commands |
+
+See [Extensions](extensions.md), [Skills](skills.md), and [Packages](packages.md).
 
 ## Example
 
@@ -180,40 +95,35 @@ See [packages.md](packages.md) for package management details.
   "defaultProvider": "anthropic",
   "defaultModel": "claude-sonnet-4-20250514",
   "defaultThinkingLevel": "medium",
-  "theme": "dark",
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 16384,
-    "keepRecentTokens": 20000
-  },
-  "retry": {
-    "enabled": true,
-    "maxRetries": 3
-  },
+  "colourScheme": "default",
+  "showReasoning": true,
+  "autoCompact": true,
   "enabledModels": ["claude-*", "gpt-4o"],
-  "packages": ["indusagi-skills"]
+  "extensionPackages": ["indusagi-skills"]
 }
 ```
 
 ## Project Overrides
 
-Project settings (`.indusagi/settings.json`) override global settings. Nested objects are merged:
+Project settings (`.indusagi/settings.json`) override global settings key by key:
 
 ```json
 // ~/.indusagi/agent/settings.json (global)
 {
-  "theme": "dark",
-  "compaction": { "enabled": true, "reserveTokens": 16384 }
+  "colourScheme": "default",
+  "autoCompact": true,
+  "defaultThinkingLevel": "medium"
 }
 
 // .indusagi/settings.json (project)
 {
-  "compaction": { "reserveTokens": 8192 }
+  "defaultThinkingLevel": "high"
 }
 
-// Result
+// Effective values
 {
-  "theme": "dark",
-  "compaction": { "enabled": true, "reserveTokens": 8192 }
+  "colourScheme": "default",
+  "autoCompact": true,
+  "defaultThinkingLevel": "high"
 }
 ```

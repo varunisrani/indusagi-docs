@@ -1,412 +1,228 @@
 # Session File Format
 
-Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with a `type` field. Session entries form a tree structure via `id`/`parentId` fields, enabling in-place branching without creating new files.
+> Each session is a single append-only NDJSON file. The transcript is a **branchable tree** of nodes, not a flat list — branching repoints the active leaf and forks a new path without rewriting history.
+
+A session is persisted by the conductor's transcript store as one NDJSON (newline-delimited JSON) file. Every line is a self-describing JSON object stamped with the schema string `indus/transcript@1`. The first line is a **head** record (which leaf the session currently points at); every other line is an **entry** node in the tree.
+
+## Table of Contents
+
+- [File Location](#file-location)
+- [On-Disk Schema](#on-disk-schema)
+- [Head Line](#head-line)
+- [Entry Line](#entry-line)
+- [Node Roles](#node-roles)
+- [Tree Structure](#tree-structure)
+- [Parsing a Session File](#parsing-a-session-file)
+- [Catalog & Management](#catalog--management)
+- [Source Files](#source-files)
 
 ## File Location
 
+Sessions live under the brand profile directory. The workspace locator resolves the profile root to:
+
 ```
-~/.indusagi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl
+~/.indusagi/agent/
 ```
 
-Where `<path>` is the working directory with `/` replaced by `-`.
+and maps the sessions directory to the `sessions/` leaf. Each session is one file named by its id:
 
-## Deleting Sessions
+```
+~/.indusagi/agent/sessions/<sessionId>.ndjson
+```
 
-Sessions can be removed by deleting their `.jsonl` files under `~/.indusagi/agent/sessions/`.
+- The on-disk identifier **is** the filename stem (`<sessionId>`), with no directory and no extension.
+- The session id is a ULID minted by the store's clock.
+- The file extension is `.ndjson`.
 
-Indusagi also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, indusagi uses the `trash` CLI to avoid permanent deletion.
+The profile root can be relocated with the `INDUSAGI_CODING_AGENT_DIR` environment variable (a `~`- and cwd-relative-aware path). When set, it replaces the default `<home>/.indusagi/agent` root and the `sessions/` directory moves with it.
 
-## Session Version
+## On-Disk Schema
 
-Sessions have a version field in the header:
-
-- **Version 1**: Linear entry sequence (legacy, auto-migrated on load)
-- **Version 2**: Tree structure with `id`/`parentId` linking
-- **Version 3**: Renamed `hookMessage` role to `custom` (extensions unification)
-
-Existing sessions are automatically migrated to the current version (v3) when loaded.
-
-## Source Files
-
-Source on GitHub ([indusagi-mono](https://github.com/badlogic/indusagi-mono)):
-- [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/badlogic/indusagi-mono/blob/main/packages/coding-agent/src/core/session-manager.ts) - Session entry types and SessionManager
-- [`packages/coding-agent/src/core/messages.ts`](https://github.com/badlogic/indusagi-mono/blob/main/packages/coding-agent/src/core/messages.ts) - Extended message types (BashExecutionMessage, CustomMessage, etc.)
-- [`packages/ai/src/types.ts`](https://github.com/badlogic/indusagi-mono/blob/main/packages/ai/src/types.ts) - Base message types (UserMessage, AssistantMessage, ToolResultMessage)
-- [`packages/agent/src/types.ts`](https://github.com/badlogic/indusagi-mono/blob/main/packages/agent/src/types.ts) - AgentMessage union type
-
-For TypeScript definitions in your project, inspect `node_modules/indusagi-coding-agent/dist/` and `node_modules/indusagi-ai/dist/`.
-
-## Message Types
-
-Session entries contain `AgentMessage` objects. Understanding these types is essential for parsing sessions and writing extensions.
-
-### Content Blocks
-
-Messages contain arrays of typed content blocks:
+The schema literal is a namespaced string (not a bare integer) so the format is self-describing:
 
 ```typescript
-interface TextContent {
-  type: "text";
-  text: string;
-}
-
-interface ImageContent {
-  type: "image";
-  data: string;      // base64 encoded
-  mimeType: string;  // e.g., "image/jpeg", "image/png"
-}
-
-interface ThinkingContent {
-  type: "thinking";
-  thinking: string;
-}
-
-interface ToolCall {
-  type: "toolCall";
-  id: string;
-  name: string;
-  arguments: Record<string, any>;
-}
+export const TRANSCRIPT_SCHEMA = "indus/transcript@1" as const;
 ```
 
-### Base Message Types (from indusagi-ai)
+Two line shapes can appear in a file, discriminated by a `kind` field:
+
+| `kind` | Purpose |
+|--------|---------|
+| `"head"` | Tracks the active leaf. Written first; rewritten on branch. |
+| `"entry"` | One node in the transcript tree. |
+
+The serializer is **tolerant** when reading: blank lines are skipped, malformed JSON lines are dropped, and any line whose `schema` is not `indus/transcript@1` is ignored.
+
+## Head Line
+
+The head line pins the schema and records which leaf the session currently points at, so a reader recovers the active branch without scanning for the deepest node. A file should carry exactly one head line; the last one wins.
+
+```json
+{"schema":"indus/transcript@1","kind":"head","sessionId":"01HZ...","leaf":"01J0..."}
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema` | `"indus/transcript@1"` | Format discriminant. |
+| `kind` | `"head"` | Line type. |
+| `sessionId` | `string` | The session this transcript belongs to. |
+| `leaf` | `string \| null` | Id of the active leaf node, or `null` for an empty transcript. |
+
+When a loaded file carries **no** head line, the store recovers by pinning the head to the deepest reachable leaf (the node with the longest `parent` chain, ties broken by latest id).
+
+## Entry Line
+
+An entry line carries one transcript node. The field names are the conductor's own — `prev` is the parent link, `at` is the timestamp, and `message` carries the framework `AgentMessage` payload verbatim.
+
+```json
+{"schema":"indus/transcript@1","kind":"entry","id":"01J0...","prev":null,"role":"user","message":{"role":"user","content":"Hello"},"at":"2026-06-11T14:00:00.000Z"}
+{"schema":"indus/transcript@1","kind":"entry","id":"01J1...","prev":"01J0...","role":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hi!"}]},"at":"2026-06-11T14:00:01.000Z"}
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `schema` | `"indus/transcript@1"` | Format discriminant. |
+| `kind` | `"entry"` | Line type. |
+| `id` | `string` | Stable unique node id (a ULID). |
+| `prev` | `string \| null` | Parent node id (`null` for a transcript root). |
+| `role` | `TranscriptRole` | The node's conversational role (see below). |
+| `message` | `AgentMessage` | The framework message payload this node persists. |
+| `at` | `string` | ISO-8601 creation timestamp. |
+| `meta` | `object` *(optional)* | Non-LLM annotations (e.g. import provenance) — omitted when absent. |
+
+The persisted node shape is `TranscriptEntry`, with conductor-side field names:
 
 ```typescript
-interface UserMessage {
-  role: "user";
-  content: string | (TextContent | ImageContent)[];
-  timestamp: number;  // Unix ms
-}
-
-interface AssistantMessage {
-  role: "assistant";
-  content: (TextContent | ThinkingContent | ToolCall)[];
-  api: string;
-  provider: string;
-  model: string;
-  usage: Usage;
-  stopReason: "stop" | "length" | "toolUse" | "error" | "aborted";
-  errorMessage?: string;
-  timestamp: number;
-}
-
-interface ToolResultMessage {
-  role: "toolResult";
-  toolCallId: string;
-  toolName: string;
-  content: (TextContent | ImageContent)[];
-  details?: any;      // Tool-specific metadata
-  isError: boolean;
-  timestamp: number;
-}
-
-interface Usage {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-  cost: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    total: number;
-  };
+interface TranscriptEntry {
+  readonly id: string;
+  readonly parent: string | null;  // serialized as `prev`
+  readonly role: TranscriptRole;
+  readonly content: AgentMessage;   // serialized as `message`
+  readonly createdAt: string;       // serialized as `at`
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 ```
 
-### Extended Message Types (from indusagi-coding-agent)
+The `message` payload is an opaque framework `AgentMessage` (from `indusagi/agent`) — the store persists and replays it without re-declaring the message schema.
+
+## Node Roles
+
+The node `role` is the conductor's own discriminant for the **node**, not the LLM message. It spans the LLM turns plus the conductor's bookkeeping nodes:
 
 ```typescript
-interface BashExecutionMessage {
-  role: "bashExecution";
-  command: string;
-  output: string;
-  exitCode: number | undefined;
-  cancelled: boolean;
-  truncated: boolean;
-  fullOutputPath?: string;
-  excludeFromContext?: boolean;  // true for !! prefix commands
-  timestamp: number;
-}
-
-interface CustomMessage {
-  role: "custom";
-  customType: string;            // Extension identifier
-  content: string | (TextContent | ImageContent)[];
-  display: boolean;              // Show in TUI
-  details?: any;                 // Extension-specific metadata
-  timestamp: number;
-}
-
-interface BranchSummaryMessage {
-  role: "branchSummary";
-  summary: string;
-  fromId: string;                // Entry we branched from
-  timestamp: number;
-}
-
-interface CompactionSummaryMessage {
-  role: "compactionSummary";
-  summary: string;
-  tokensBefore: number;
-  timestamp: number;
-}
+type TranscriptRole =
+  | "user"
+  | "assistant"
+  | "tool"
+  | "system"
+  | "condense"
+  | "note";
 ```
 
-### AgentMessage Union
+The role is derived from the carried message by `roleForMessage()`:
 
-```typescript
-type AgentMessage =
-  | UserMessage
-  | AssistantMessage
-  | ToolResultMessage
-  | BashExecutionMessage
-  | CustomMessage
-  | BranchSummaryMessage
-  | CompactionSummaryMessage;
-```
-
-## Entry Base
-
-All entries (except `SessionHeader`) extend `SessionEntryBase`:
-
-```typescript
-interface SessionEntryBase {
-  type: string;
-  id: string;           // 8-char hex ID
-  parentId: string | null;  // Parent entry ID (null for first entry)
-  timestamp: string;    // ISO timestamp
-}
-```
-
-## Entry Types
-
-### SessionHeader
-
-First line of the file. Metadata only, not part of the tree (no `id`/`parentId`).
-
-```json
-{"type":"session","version":3,"id":"uuid","timestamp":"2024-12-03T14:00:00.000Z","cwd":"/path/to/project"}
-```
-
-For sessions with a parent (created via `/fork` or `newSession({ parentSession })`):
-
-```json
-{"type":"session","version":3,"id":"uuid","timestamp":"2024-12-03T14:00:00.000Z","cwd":"/path/to/project","parentSession":"/path/to/original/session.jsonl"}
-```
-
-### SessionMessageEntry
-
-A message in the conversation. The `message` field contains an `AgentMessage`.
-
-```json
-{"type":"message","id":"a1b2c3d4","parentId":"prev1234","timestamp":"2024-12-03T14:00:01.000Z","message":{"role":"user","content":"Hello"}}
-{"type":"message","id":"b2c3d4e5","parentId":"a1b2c3d4","timestamp":"2024-12-03T14:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi!"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{...},"stopReason":"stop"}}
-{"type":"message","id":"c3d4e5f6","parentId":"b2c3d4e5","timestamp":"2024-12-03T14:00:03.000Z","message":{"role":"toolResult","toolCallId":"call_123","toolName":"bash","content":[{"type":"text","text":"output"}],"isError":false}}
-```
-
-### ModelChangeEntry
-
-Emitted when the user switches models mid-session.
-
-```json
-{"type":"model_change","id":"d4e5f6g7","parentId":"c3d4e5f6","timestamp":"2024-12-03T14:05:00.000Z","provider":"openai","modelId":"gpt-4o"}
-```
-
-### ThinkingLevelChangeEntry
-
-Emitted when the user changes the thinking/reasoning level.
-
-```json
-{"type":"thinking_level_change","id":"e5f6g7h8","parentId":"d4e5f6g7","timestamp":"2024-12-03T14:06:00.000Z","thinkingLevel":"high"}
-```
-
-### CompactionEntry
-
-Created when context is compacted. Stores a summary of earlier messages.
-
-```json
-{"type":"compaction","id":"f6g7h8i9","parentId":"e5f6g7h8","timestamp":"2024-12-03T14:10:00.000Z","summary":"User discussed X, Y, Z...","firstKeptEntryId":"c3d4e5f6","tokensBefore":50000}
-```
-
-Optional fields:
-- `details`: Implementation-specific data (e.g., `{ readFiles: string[], modifiedFiles: string[] }` for default, or custom data for extensions)
-- `fromHook`: `true` if generated by an extension, `false`/`undefined` if indusagi-generated (legacy field name)
-
-### BranchSummaryEntry
-
-Created when switching branches via `/tree` with an LLM generated summary of the left branch up to the common ancestor. Captures context from the abandoned path.
-
-```json
-{"type":"branch_summary","id":"g7h8i9j0","parentId":"a1b2c3d4","timestamp":"2024-12-03T14:15:00.000Z","fromId":"f6g7h8i9","summary":"Branch explored approach A..."}
-```
-
-Optional fields:
-- `details`: File tracking data (`{ readFiles: string[], modifiedFiles: string[] }`) for default, or custom data for extensions
-- `fromHook`: `true` if generated by an extension, `false`/`undefined` if indusagi-generated (legacy field name)
-
-### CustomEntry
-
-Extension state persistence. Does NOT participate in LLM context.
-
-```json
-{"type":"custom","id":"h8i9j0k1","parentId":"g7h8i9j0","timestamp":"2024-12-03T14:20:00.000Z","customType":"my-extension","data":{"count":42}}
-```
-
-Use `customType` to identify your extension's entries on reload.
-
-### CustomMessageEntry
-
-Extension-injected messages that DO participate in LLM context.
-
-```json
-{"type":"custom_message","id":"i9j0k1l2","parentId":"h8i9j0k1","timestamp":"2024-12-03T14:25:00.000Z","customType":"my-extension","content":"Injected context...","display":true}
-```
-
-Fields:
-- `content`: String or `(TextContent | ImageContent)[]` (same as UserMessage)
-- `display`: `true` = show in TUI with distinct styling, `false` = hidden
-- `details`: Optional extension-specific metadata (not sent to LLM)
-
-### LabelEntry
-
-User-defined bookmark/marker on an entry.
-
-```json
-{"type":"label","id":"j0k1l2m3","parentId":"i9j0k1l2","timestamp":"2024-12-03T14:30:00.000Z","targetId":"a1b2c3d4","label":"checkpoint-1"}
-```
-
-Set `label` to `undefined` to clear a label.
-
-### SessionInfoEntry
-
-Session metadata (e.g., user-defined display name). Set via `/name` command or `indusagi.setSessionName()` in extensions.
-
-```json
-{"type":"session_info","id":"k1l2m3n4","parentId":"j0k1l2m3","timestamp":"2024-12-03T14:35:00.000Z","name":"Refactor auth module"}
-```
-
-The session name is displayed in the session selector (`/resume`) instead of the first message when set.
+| `AgentMessage.role` | Node `role` |
+|---------------------|-------------|
+| `user` | `user` |
+| `assistant` | `assistant` |
+| `toolResult` | `tool` |
+| `compactionSummary` / `branchSummary` | `condense` |
+| anything else (custom / notification) | `note` |
 
 ## Tree Structure
 
-Entries form a tree:
-- First entry has `parentId: null`
-- Each subsequent entry points to its parent via `parentId`
-- Branching creates new children from an earlier entry
-- The "leaf" is the current position in the tree
+Entries form an append-only tree:
+
+- A root entry has `prev: null`.
+- Each later entry names its parent via `prev`.
+- The **leaf** (tracked on the head line) is the current position.
+- Branching repoints the leaf at an earlier node; the next append becomes that node's child, forking a new path. Existing nodes are never rewritten.
 
 ```
-[user msg] ─── [assistant] ─── [user msg] ─── [assistant] ─┬─ [user msg] ← current leaf
-                                                            │
-                                                            └─ [branch_summary] ─── [user msg] ← alternate branch
+[user] ── [assistant] ── [user] ── [assistant] ─┬─ [user]   ← current leaf
+                                                 │
+                                                 └─ [user]   ← alternate branch
 ```
 
-## Context Building
+The active conversation is the `prev`-chain walked from the leaf back to a root, reversed to chronological order — see [tree.md](tree.md) for navigation, and [compaction.md](compaction.md) for how an over-budget branch is condensed.
 
-`buildSessionContext()` walks from the current leaf to the root, producing the message list for the LLM:
+## Parsing a Session File
 
-1. Collects all entries on the path
-2. Extracts current model and thinking level settings
-3. If a `CompactionEntry` is on the path:
-   - Emits the summary first
-   - Then messages from `firstKeptEntryId` to compaction
-   - Then messages after compaction
-4. Converts `BranchSummaryEntry` and `CustomMessageEntry` to appropriate message formats
-
-## Parsing Example
+`parseSessionText(sessionId, text)` returns `{ head, entries }`. To parse a file by hand, split on newlines, `JSON.parse` each non-blank line, and switch on `kind`:
 
 ```typescript
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 
-const lines = readFileSync("session.jsonl", "utf8").trim().split("\n");
+const text = readFileSync(
+  `${process.env.HOME}/.indusagi/agent/sessions/${sessionId}.ndjson`,
+  "utf8",
+);
 
-for (const line of lines) {
-  const entry = JSON.parse(line);
+for (const raw of text.split("\n")) {
+  const line = raw.trim();
+  if (line.length === 0) continue;
 
-  switch (entry.type) {
-    case "session":
-      console.log(`Session v${entry.version ?? 1}: ${entry.id}`);
-      break;
-    case "message":
-      console.log(`[${entry.id}] ${entry.message.role}: ${JSON.stringify(entry.message.content)}`);
-      break;
-    case "compaction":
-      console.log(`[${entry.id}] Compaction: ${entry.tokensBefore} tokens summarized`);
-      break;
-    case "branch_summary":
-      console.log(`[${entry.id}] Branch from ${entry.fromId}`);
-      break;
-    case "custom":
-      console.log(`[${entry.id}] Custom (${entry.customType}): ${JSON.stringify(entry.data)}`);
-      break;
-    case "custom_message":
-      console.log(`[${entry.id}] Extension message (${entry.customType}): ${entry.content}`);
-      break;
-    case "label":
-      console.log(`[${entry.id}] Label "${entry.label}" on ${entry.targetId}`);
-      break;
-    case "model_change":
-      console.log(`[${entry.id}] Model: ${entry.provider}/${entry.modelId}`);
-      break;
-    case "thinking_level_change":
-      console.log(`[${entry.id}] Thinking: ${entry.thinkingLevel}`);
-      break;
+  let parsed: any;
+  try { parsed = JSON.parse(line); } catch { continue; }
+  if (parsed.schema !== "indus/transcript@1") continue;
+
+  if (parsed.kind === "head") {
+    console.log(`leaf: ${parsed.leaf ?? "(empty)"}`);
+  } else if (parsed.kind === "entry") {
+    console.log(`[${parsed.id}] ${parsed.role} (parent ${parsed.prev}):`,
+      JSON.stringify(parsed.message).slice(0, 80));
   }
 }
 ```
 
-## SessionManager API
+## Catalog & Management
 
-Key methods for working with sessions programmatically.
+A workspace accumulates many session files. The `SessionLibrary` is the catalog-and-navigation layer over that collection. It is exposed on the package's `sessions` barrel namespace (see [sdk.md](sdk.md)); construct it with the resolved sessions directory:
 
-### Static Creation Methods
-- `SessionManager.create(cwd, sessionDir?)` - New session
-- `SessionManager.open(path, sessionDir?)` - Open existing session file
-- `SessionManager.continueRecent(cwd, sessionDir?)` - Continue most recent or create new
-- `SessionManager.inMemory(cwd?)` - No file persistence
-- `SessionManager.forkFrom(sourcePath, targetCwd, sessionDir?)` - Fork session from another project
+```typescript
+import { sessions } from "indusagi-coding-agent";
 
-### Static Listing Methods
-- `SessionManager.list(cwd, sessionDir?, onProgress?)` - List sessions for a directory
-- `SessionManager.listAll(onProgress?)` - List all sessions across all projects
+const library = new sessions.SessionLibrary({
+  sessionsDir: `${process.env.HOME}/.indusagi/agent/sessions`,
+});
 
-### Instance Methods - Session Management
-- `newSession(options?)` - Start a new session (options: `{ parentSession?: string }`)
-- `setSessionFile(path)` - Switch to a different session file
-- `createBranchedSession(leafId)` - Extract branch to new session file
+const rows = await library.list({ deep: true });
+```
 
-### Instance Methods - Appending (all return entry ID)
-- `appendMessage(message)` - Add message
-- `appendThinkingLevelChange(level)` - Record thinking change
-- `appendModelChange(provider, modelId)` - Record model change
-- `appendCompaction(summary, firstKeptEntryId, tokensBefore, details?, fromHook?)` - Add compaction
-- `appendCustomEntry(customType, data?)` - Extension state (not in context)
-- `appendSessionInfo(name)` - Set session display name
-- `appendCustomMessageEntry(customType, content, display, details?)` - Extension message (in context)
-- `appendLabelChange(targetId, label)` - Set/clear label
+Each row is a `SavedSession`:
 
-### Instance Methods - Tree Navigation
-- `getLeafId()` - Current position
-- `getLeafEntry()` - Get current leaf entry
-- `getEntry(id)` - Get entry by ID
-- `getBranch(fromId?)` - Walk from entry to root
-- `getTree()` - Get full tree structure
-- `getChildren(parentId)` - Get direct children
-- `getLabel(id)` - Get label for entry
-- `branch(entryId)` - Move leaf to earlier entry
-- `resetLeaf()` - Reset leaf to null (before any entries)
-- `branchWithSummary(entryId, summary, details?, fromHook?)` - Branch with context summary
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `string` | Bare session id (the filename stem). |
+| `path` | `string` | Absolute on-disk path. |
+| `name` | `string` *(opt)* | Derived label (the opening turn preview). |
+| `lastModified` | `number` *(opt)* | File mtime, epoch ms. |
+| `size` | `number` *(opt)* | File size in bytes. |
+| `messageCount` | `number` *(opt)* | Count of conversational (user/assistant/tool) nodes. |
+| `preview` | `string` *(opt)* | Single-line excerpt of the opening user turn. |
 
-### Instance Methods - Context & Info
-- `buildSessionContext()` - Get messages, thinkingLevel, and model for LLM
-- `getEntries()` - All entries (excluding header)
-- `getHeader()` - Session header metadata
-- `getSessionName()` - Get display name from latest session_info entry
-- `getCwd()` - Working directory
-- `getSessionDir()` - Session storage directory
-- `getSessionId()` - Session UUID
-- `getSessionFile()` - Session file path (undefined for in-memory)
-- `isPersisted()` - Whether session is saved to disk
+`list({ deep })` returns rows newest-modified first. A **shallow** listing fills only `id`/`path`/`size`/`lastModified` (it only `stat`s each file, so a large directory lists fast); a **deep** listing opens each file to fill `messageCount`, `preview`, and `name`. A missing directory yields an empty list rather than an error.
+
+File-level operations:
+
+| Method | Effect |
+|--------|--------|
+| `library.open(id)` | Hydrate the file back into a live `TranscriptStore`, or `null` if absent. |
+| `library.rename(fromId, toId)` | Move `<fromId>.ndjson` to `<toId>.ndjson`; returns the new path. Throws if the source is missing or the target exists. |
+| `library.remove(id)` | Delete the file. Returns `true` if removed, `false` if already absent; never throws on an absent session. |
+| `library.pathOf(id)` | The absolute path a session id persists to. |
+
+### Deleting Sessions
+
+A session is removed by deleting its `.ndjson` file under `~/.indusagi/agent/sessions/` — or programmatically via `library.remove(id)`. There is no separate metadata file to clean up; the file **is** the whole session.
+
+## Source Files
+
+Internal source (clean-room rebuild, `indus-code-rebuild/src`):
+
+- `conductor/contract.ts` — `TranscriptEntry`, `SessionHead`, `TranscriptRole`, `TRANSCRIPT_SCHEMA`.
+- `conductor/transcript-store/store.ts` — `TranscriptStore`, `fsBackend`, `memoryBackend`, `replay`.
+- `conductor/transcript-store/serialize.ts` — `encodeEntry`, `encodeHead`, `parseSessionText`, `roleForMessage`, the on-disk line shapes.
+- `sessions/library.ts` — `SessionLibrary` (catalog, open, rename, remove).
+- `sessions/contract.ts` — `SavedSession`, `BranchNode`, `PriorTurn`.
+- `workspace/locator.ts` / `workspace/brand.ts` — the profile-root + `sessions/` path resolution.

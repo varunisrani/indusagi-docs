@@ -1,35 +1,29 @@
 # MCP (Model Context Protocol) - Developer Guide
 
-## Overview
+> indusagi ships two MCP layers. `indusagi/mcp` is a self-contained implementation that adapts MCP tools into `AgentTool`s. `indusagi/interop` is the clean-room bridge built on `@modelcontextprotocol/sdk` that grafts remote tools into the kernel `ToolRegistry` and can host the agent's own tools. This guide covers connecting clients and servers on both layers.
 
-The MCP module in indusagi provides Model Context Protocol support, enabling applications to connect with external tools, APIs, and services through a standardized interface.
+## Table of Contents
 
-## Architecture
+1. Connecting to a server with `MCPClient`
+2. Managing many servers with `MCPClientPool`
+3. Adapting MCP tools into `AgentTool`s
+4. One-call setup with `initializeMCP`
+5. Hosting your tools with `MCPServer`
+6. Configuration files
+7. Schema conversion
+8. Error handling
+9. The interop bridge: endpoints, fleets, mounting
+10. The interop provider host
 
-```
-indusagi/mcp
-├── MCPClient          (Single server connection)
-├── MCPClientPool      (Multiple server management)
-├── MCPServer          (Create custom MCP servers)
-├── MCPToolFactory     (Convert MCP tools to AgentTools)
-├── Config             (Server configuration management)
-├── SchemaConverter    (JSON Schema ↔ TypeBox conversion)
-└── Types              (Protocol definitions)
-```
+---
 
-## Core Components
+## 1. Connecting to a server with `MCPClient`
 
-### 1. MCPClient - Single Server Connection
+Source: `src/facade/mcp-core/client.ts`. A client wraps one server. Stdio servers are spawned as subprocesses; HTTP servers are reached per-request.
 
-Manages connection to a single MCP server.
-
-**Import:**
 ```typescript
-import { MCPClient, type MCPClientOptions } from "indusagi/mcp";
-```
+import { MCPClient } from "indusagi/mcp";
 
-**Creating a client:**
-```typescript
 const client = new MCPClient({
   name: "filesystem",
   config: {
@@ -37,273 +31,118 @@ const client = new MCPClient({
     args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
   },
   timeout: 60000,
-  logger: (msg) => console.log(`[MCP] ${msg.level}: ${msg.message}`),
+  logger: (msg) => console.log(`[${msg.level}] ${msg.message}`),
   enableServerLogs: true,
 });
 
 await client.connect();
-```
 
-**Listing tools:**
-```typescript
 const tools = await client.listTools();
-console.log(`Available tools: ${tools.map(t => t.name).join(", ")}`);
-```
+console.log(tools.map((t) => t.name).join(", "));
 
-**Executing a tool:**
-```typescript
-const result = await client.callTool("read_file", {
-  path: "./README.md",
-});
-console.log(result);
-```
+const result = await client.callTool("read_file", { path: "./README.md" });
+// result is an MCPToolCallResult: { content: MCPContentBlock[], isError?, structuredContent? }
 
-**Listing resources:**
-```typescript
-const resources = await client.listResources();
-```
-
-**Reading resources:**
-```typescript
-const content = await client.readResource("file:///path/to/file");
-```
-
-**Disconnecting:**
-```typescript
 await client.disconnect();
 ```
 
-### 2. MCPClientPool - Multiple Server Management
+`callTool` returns the structured `MCPToolCallResult`. Resources and prompts are also available:
 
-Orchestrates connections to multiple MCP servers.
-
-**Import:**
 ```typescript
-import { MCPClientPool, type MCPClientPoolOptions } from "indusagi/mcp";
+const resources = await client.listResources();   // [] if the server has no resources capability
+const content = await client.readResource("file:///path/to/file");
+
+const prompts = await client.listPrompts();        // [] if no prompts capability
+const prompt = await client.getPrompt("review", { language: "typescript" });
 ```
 
-**Creating a pool:**
+HTTP transport uses a `URL` object (not a string):
+
 ```typescript
+const http = new MCPClient({
+  name: "remote",
+  config: {
+    url: new URL("http://localhost:8080/mcp"),
+    headers: { Authorization: "Bearer token" },
+  },
+});
+await http.connect();
+```
+
+The HTTP path accepts both plain JSON and SSE-framed (`event:` / `data:`) responses.
+
+## 2. Managing many servers with `MCPClientPool`
+
+Source: `src/facade/mcp-core/client-pool.ts`.
+
+```typescript
+import { MCPClientPool } from "indusagi/mcp";
+
 const pool = new MCPClientPool({
   servers: [
-    {
-      name: "filesystem",
-      config: {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
-      },
-    },
-    {
-      name: "github",
-      config: {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-github"],
-      },
-      env: {
-        GITHUB_TOKEN: process.env.GITHUB_TOKEN || "",
-      },
-    },
+    { name: "filesystem", config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "."] } },
+    { name: "github", config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN: process.env.GITHUB_TOKEN || "" } } },
   ],
 });
-```
 
-**Connecting all servers:**
-```typescript
-await pool.connectAll();
-// Errors per-server are logged but don't fail the entire operation
-```
+await pool.connectAll();   // a server that fails to connect is logged and skipped, not fatal
 
-**Getting all clients:**
-```typescript
 for (const client of pool.getAllClients()) {
-  console.log(`Connected to: ${client.serverName}`);
+  console.log(`Connected: ${client.serverName}`);
 }
-```
 
-**Getting server status:**
-```typescript
-const status = pool.getStatus();
-console.log(status);
-// [
-//   { name: "filesystem", connected: true, toolCount: 8 },
-//   { name: "github", connected: true, toolCount: 12 }
-// ]
-```
+const status = await pool.getStatus();   // NOTE: getStatus() is async
+// [{ name: "filesystem", connected: true, toolCount: 8, resourceCount: 0, promptCount: 0 }, ...]
 
-**Adding a server dynamically:**
-```typescript
-await pool.addServer({
-  name: "postgres",
-  config: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-postgres"],
-  },
-  env: {
-    DATABASE_URL: "postgresql://...",
-  },
-});
-```
-
-**Disconnecting all servers:**
-```typescript
 await pool.disconnectAll();
 ```
 
-### 3. MCPServer - Create Custom MCP Servers
+Note that the server `env` lives on the inner `config` object (`config.env`), matching `StdioServerConfig`. Dynamic add/remove return a boolean instead of throwing:
 
-Build custom MCP servers to expose your own tools.
-
-**Import:**
 ```typescript
-import { MCPServer, createMCPServer, type MCPServerOptions } from "indusagi/mcp";
-```
-
-**Creating a custom server:**
-```typescript
-const server = createMCPServer({
-  name: "my-calculator",
-  version: "1.0.0",
+const added = await pool.addServer({
+  name: "postgres",
+  config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-postgres"], env: { DATABASE_URL: "postgresql://..." } },
 });
+// added === false if the name already exists or the connection failed
 
-// Add tools
-server.addTool({
-  name: "add",
-  description: "Add two numbers",
-  inputSchema: {
-    type: "object",
-    properties: {
-      a: { type: "number" },
-      b: { type: "number" },
-    },
-    required: ["a", "b"],
-  },
-  handler: async ({ a, b }) => ({
-    result: a + b,
-  }),
-});
-
-// Start stdio transport
-await server.startStdio();
+await pool.removeServer("postgres");   // false if no such server
+await pool.reload();                    // disconnectAll() then connectAll()
 ```
 
-**Using with NodeJs child_process:**
-```typescript
-const { spawn } = require("child_process");
+Aggregate listings are also available: `listAllTools()`, `listAllResources()`, `listAllPrompts()` each return a `Record<serverName, ...>`.
 
-const proc = spawn("node", ["my-calculator-server.js"]);
+## 3. Adapting MCP tools into `AgentTool`s
 
-// Server now accepts MCP protocol messages via stdio
-```
+Source: `src/facade/mcp-core/tool-factory.ts`. Adapted tools are namespaced `${serverName}_${toolName}` with `category: "mcp"`. The argument order is **tools/tool first, client second**.
 
-### 4. MCPToolFactory - Convert Tools
-
-Convert MCP tools to agent tools.
-
-**Import:**
 ```typescript
 import {
-  createMCPAgentToolFactory,
   registerMCPToolsInRegistry,
+  createMCPAgentToolFactory,
   createMCPToolsMap,
+  createMCPToolsRecord,
 } from "indusagi/mcp";
-```
-
-**Creating agent tools from MCP tools:**
-```typescript
 import { ToolRegistry } from "indusagi/agent";
 
 const registry = new ToolRegistry();
-const client = /* ... MCPClient instance ... */;
-
-// Get MCP tools
 const mcpTools = await client.listTools();
 
-// Register all tools
+// Register all tools (returns count)
 const count = await registerMCPToolsInRegistry(registry, client, mcpTools);
-console.log(`Registered ${count} tools from ${client.serverName}`);
-```
 
-**Manual tool conversion:**
-```typescript
-const mcpTool = {
-  name: "read_file",
-  description: "Read file contents",
-  inputSchema: {
-    type: "object",
-    properties: {
-      path: { type: "string" },
-    },
-    required: ["path"],
-  },
-};
-
-const factory = createMCPAgentToolFactory(mcpTool, client);
+// Or build a single tool factory
+const factory = createMCPAgentToolFactory(mcpTools[0], client);
 const agentTool = factory();
 
-// Now you can use agentTool with agents
+// Or build a Map / Record of namespaced tools
+const toolMap = createMCPToolsMap(mcpTools, client);       // Map<"filesystem_read_file", AgentTool>
+const toolRecord = createMCPToolsRecord(mcpTools, client); // Record<"filesystem_read_file", AgentTool>
 ```
 
-**Creating a map of tools:**
-```typescript
-const toolsMap = createMCPToolsMap(client, mcpTools);
+Inside the generated `AgentTool.execute`, the result's text blocks are truncated for display (first 4 lines / 500 chars) while the full `MCPToolCallResult` is preserved in `details`. Image blocks are passed through. Any `MCPError` is converted into an `isError: true` result rather than thrown.
 
-// {
-//   "filesystem/read_file": AgentTool,
-//   "filesystem/write_file": AgentTool,
-//   ...
-// }
-```
-
-### 5. Configuration Management
-
-**Import:**
-```typescript
-import {
-  loadMCPConfig,
-  saveConfig,
-  ensureUserConfigDir,
-  getUserConfigPath,
-  getProjectConfigPath,
-} from "indusagi/mcp";
-```
-
-**Loading configuration:**
-```typescript
-// Loads from:
-// 1. Project config: .mcp.json in current directory
-// 2. User config: ~/.mcp.json or ~/.config/mcp/config.json
-// 3. Environment: MCP_CONFIG_PATH env var
-const configs = loadMCPConfig(process.cwd());
-```
-
-**Saving configuration:**
-```typescript
-const config = {
-  name: "my-server",
-  config: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-example"],
-  },
-};
-
-// Save to user config
-await saveConfig(config, { scope: "user" });
-
-// Save to project config
-await saveConfig(config, { scope: "project" });
-```
-
-**Configuration file locations:**
-```typescript
-const userPath = getUserConfigPath();      // ~/.mcp.json
-const projectPath = getProjectConfigPath(); // .mcp.json
-```
-
-## Convenience Functions
-
-### Initialize MCP
-
-One-line initialization:
+## 4. One-call setup with `initializeMCP`
 
 ```typescript
 import { initializeMCP } from "indusagi/mcp";
@@ -315,240 +154,213 @@ const { pool, toolCount } = await initializeMCP(registry, process.cwd());
 console.log(`Connected to ${pool.getAllClients().length} servers with ${toolCount} tools`);
 ```
 
-## Schema Conversion
+`initializeMCP` calls `loadMCPConfig(cwd)`, connects the pool, and registers every client's tools. With no configured servers it returns an empty pool and `toolCount: 0`.
 
-Convert JSON Schema to TypeBox and vice versa:
+## 5. Hosting your tools with `MCPServer`
+
+Source: `src/facade/mcp-core/server.ts`. `MCPServer` exposes existing `AgentTool`s (not free-form handlers) over stdio. Provide the tools at construction or add them later.
+
+```typescript
+import { MCPServer, createMCPServer } from "indusagi/mcp";
+import { createBashTool } from "indusagi/agent";   // createBashTool(cwd, options?)
+
+const server = createMCPServer({
+  name: "My Tools Server",
+  version: "1.0.0",
+  tools: [createBashTool(process.cwd())],
+});
+
+server.addTool(someOtherAgentTool);
+server.removeTool("some_tool");
+
+await server.startStdio();   // reads JSON-RPC from stdin, writes to stdout; never resolves
+```
+
+The server answers `initialize`, `tools/list`, and `tools/call`; `resources/list` and `prompts/list` return empty lists. All diagnostics print to stderr so stdout stays a clean protocol stream — wire this server into a client (e.g. Claude Desktop, Cursor) as a stdio command.
+
+## 6. Configuration files
+
+Source: `src/facade/mcp-core/config.ts`. `loadMCPConfig(configPathOrCwd)`:
+
+- If the argument is an existing **file**, it is parsed directly.
+- Otherwise the argument is treated as a working directory, and these files are merged in order:
+  1. Project: `<cwd>/.indusvx/mcp.json`
+  2. User (XDG): `$XDG_CONFIG_HOME/indusvx/mcp.json` (defaults to `~/.config/indusvx/mcp.json`)
+  3. Legacy: `~/.indusvx/agent/mcp.json`
+  4. Legacy alt: `~/.indusvx/agent/mcp-servers.json`
+
+The `servers` field may be an array or an object keyed by server name. Entries with `enabled: false` are skipped. A `url` entry yields HTTP transport (the string is parsed into a `URL`); a `command` entry yields stdio transport.
+
+```typescript
+import {
+  loadMCPConfig,
+  saveUserConfig,
+  saveProjectConfig,
+  saveConfig,
+  getUserConfigPath,
+  getProjectConfigPath,
+  createDefaultConfig,
+  EXAMPLE_CONFIG,
+} from "indusagi/mcp";
+
+const configs = loadMCPConfig(process.cwd());   // MCPConnectionOptions[]
+
+// Save an MCPConfigFile (not a single entry):
+saveProjectConfig({ servers: [{ name: "fs", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "."] }] });
+saveUserConfig(EXAMPLE_CONFIG);
+saveConfig("/abs/path/mcp.json", createDefaultConfig());
+
+getUserConfigPath();      // $XDG_CONFIG_HOME/indusvx/mcp.json
+getProjectConfigPath();   // <cwd>/.indusvx/mcp.json
+```
+
+`saveConfig`, `saveUserConfig`, and `saveProjectConfig` all take a whole `MCPConfigFile` (`{ servers: [...] }`) and are synchronous.
+
+## 7. Schema conversion
+
+Source: `src/facade/mcp-core/schema-converter.ts`. MCP tool `inputSchema` (JSON Schema) is converted to a TypeBox `TSchema`, then made permissive so unexpected server fields never fail validation.
 
 ```typescript
 import {
   jsonSchemaToTypeBox,
   convertMCPInputSchema,
   convertMCPOutputSchema,
+  applyPassthrough,
 } from "indusagi/mcp";
 
-const jsonSchema = {
+const schema = convertMCPInputSchema({
   type: "object",
-  properties: {
-    name: { type: "string" },
-    age: { type: "number" },
-  },
+  properties: { name: { type: "string" }, age: { type: "number" } },
   required: ["name"],
-};
-
-const typeboxSchema = jsonSchemaToTypeBox(jsonSchema);
+});
+// jsonSchemaToTypeBox() followed by applyPassthrough()
 ```
 
-## Error Handling
+`jsonSchemaToTypeBox` handles primitives, objects, arrays/tuples, `enum`, `const`, `oneOf`/`anyOf` (union), and `allOf` (intersect). Properties not in `required` become optional. `applyPassthrough` recursively sets `additionalProperties: true` on object schemas.
 
-**Import error types:**
-```typescript
-import { MCPError, MCPErrorCode, isMCPError } from "indusagi/mcp";
-```
+## 8. Error handling
 
-**Handling errors:**
+Source: `src/facade/mcp-core/errors.ts`. Failures are `MCPError`s with an `MCPErrorCode`.
+
 ```typescript
+import { MCPError, MCPErrorCode, isMCPError, isSessionError } from "indusagi/mcp";
+
 try {
-  await client.callTool("nonexistent_tool", {});
+  await client.callTool("missing_tool", {});
 } catch (error) {
   if (isMCPError(error)) {
     if (error.code === MCPErrorCode.TOOL_NOT_FOUND) {
-      console.log("Tool not found");
-    } else if (error.code === MCPErrorCode.INVALID_PARAMETERS) {
-      console.log("Invalid parameters");
+      console.log("tool not found");
+    } else if (isSessionError(error)) {
+      // SESSION_ERROR or NOT_CONNECTED — reconnect
+      await client.connect();
     }
+    console.error(error.toString(), error.serverName, error.toolName);
   }
 }
 ```
 
-**Available error codes:**
-```typescript
-enum MCPErrorCode {
-  CONNECTION_FAILED = "CONNECTION_FAILED",
-  TIMEOUT = "TIMEOUT",
-  TOOL_NOT_FOUND = "TOOL_NOT_FOUND",
-  INVALID_PARAMETERS = "INVALID_PARAMETERS",
-  EXECUTION_ERROR = "EXECUTION_ERROR",
-  SERVER_ERROR = "SERVER_ERROR",
-  NOT_CONNECTED = "NOT_CONNECTED",
-  CONFIG_ERROR = "CONFIG_ERROR",
-  SCHEMA_CONVERSION_ERROR = "SCHEMA_CONVERSION_ERROR",
-}
-```
-
-## Advanced Usage
-
-### Custom Tool Registration
-
-```typescript
-class CustomToolRegistry extends ToolRegistry {
-  async registerMCPTools(pool: MCPClientPool) {
-    for (const client of pool.getAllClients()) {
-      const tools = await client.listTools();
-      for (const tool of tools) {
-        // Custom registration logic
-        const factory = createMCPAgentToolFactory(tool, client);
-        const agentTool = factory();
-        this.register(agentTool);
-      }
-    }
-  }
-}
-```
-
-### Server Monitoring
-
-```typescript
-// Monitor connection status
-const status = pool.getStatus();
-const connected = status.filter(s => s.connected);
-const disconnected = status.filter(s => !s.connected);
-
-console.log(`${connected.length}/${status.length} servers connected`);
-
-if (disconnected.length > 0) {
-  console.warn(`Disconnected servers: ${disconnected.map(s => s.name).join(", ")}`);
-}
-```
-
-### Dynamic Server Addition
-
-```typescript
-// Add servers based on available plugins
-const pluginServers = await discoverPluginServers();
-for (const server of pluginServers) {
-  await pool.addServer(server);
-}
-```
-
-## Testing
-
-**Mock MCP Server for Testing:**
-
-```typescript
-import { MCPServer } from "indusagi/mcp";
-
-// Create test server
-const testServer = new MCPServer({
-  name: "test-server",
-  version: "1.0.0",
-});
-
-testServer.addTool({
-  name: "test_tool",
-  description: "Test tool",
-  inputSchema: { type: "object" },
-  handler: async () => ({ result: "test" }),
-});
-
-// Use in tests
-```
-
-## Performance Considerations
-
-### Connection Pooling
-- Reuse `MCPClientPool` across requests
-- Share tool registry between requests
-- Don't create new pools per request
-
-### Tool Caching
-```typescript
-// Cache tool list
-const toolsCache = new Map<string, MCPToolDefinition[]>();
-
-async function getCachedTools(client: MCPClient) {
-  if (!toolsCache.has(client.serverName)) {
-    const tools = await client.listTools();
-    toolsCache.set(client.serverName, tools);
-  }
-  return toolsCache.get(client.serverName);
-}
-```
-
-### Timeout Management
-```typescript
-// Set appropriate timeouts
-const client = new MCPClient({
-  name: "slow-server",
-  config: { /* ... */ },
-  timeout: 120000, // 2 minutes for slow operations
-});
-```
-
-## Troubleshooting
-
-### Server Connection Issues
-
-```typescript
-try {
-  await client.connect();
-} catch (error) {
-  if (error.code === MCPErrorCode.CONNECTION_FAILED) {
-    console.error("Failed to connect:", error.message);
-    // Check if command exists
-    // Check if dependencies are installed
-  }
-}
-```
-
-### Tool Execution Failures
-
-```typescript
-try {
-  const result = await client.callTool(toolName, params);
-} catch (error) {
-  if (error.code === MCPErrorCode.INVALID_PARAMETERS) {
-    console.error("Invalid parameters for tool:", toolName);
-    // Log the tool schema
-  }
-}
-```
-
-## API Reference
-
-### MCPClient
-
-```typescript
-class MCPClient {
-  constructor(options: MCPClientOptions);
-  
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  
-  listTools(): Promise<MCPToolDefinition[]>;
-  callTool(name: string, params: any): Promise<any>;
-  
-  listResources(): Promise<MCPResource[]>;
-  readResource(uri: string): Promise<string>;
-  
-  listPrompts(): Promise<MCPPrompt[]>;
-  getPrompt(name: string, params?: Record<string, string>): Promise<string>;
-  
-  get serverName(): string;
-  get isConnected(): boolean;
-}
-```
-
-### MCPClientPool
-
-```typescript
-class MCPClientPool {
-  constructor(options: MCPClientPoolOptions);
-  
-  connectAll(): Promise<void>;
-  disconnectAll(): Promise<void>;
-  
-  addServer(config: MCPConnectionOptions): Promise<void>;
-  removeServer(name: string): Promise<void>;
-  
-  getAllClients(): MCPClient[];
-  getClient(name: string): MCPClient | undefined;
-  
-  getStatus(): MCPServerStatus[];
-}
-```
+Set `INDUSAGI_DEBUG` in the environment to surface the client's debug/info logs on the console (errors always log, even without it).
 
 ---
 
-**Version**: 0.12.15  
-**Last Updated**: March 2026  
-**Status**: · Production Ready
+## 9. The interop bridge: endpoints, fleets, mounting
+
+Source: `src/interop/`, imported from `indusagi/interop`. This layer is built on `@modelcontextprotocol/sdk` and integrates with the kernel `capabilities`/`runtime` contracts rather than the `AgentTool` facade.
+
+A `ServerConfig` is discriminated by its `kind` and carries a stable `id` used to namespace tools:
+
+```typescript
+import { createServerEndpoint, startServerFleet, mountProtocolBridge } from "indusagi/interop";
+import type { ServerConfig, BridgeConfig } from "indusagi/interop";
+
+const fs: ServerConfig = {
+  id: "filesystem",
+  kind: "stdio",
+  command: "npx",
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
+};
+
+const remote: ServerConfig = {
+  id: "remote",
+  kind: "sse",
+  url: "http://localhost:8080/sse",
+  headers: { Authorization: "Bearer token" },
+};
+```
+
+### A single endpoint
+
+```typescript
+const endpoint = createServerEndpoint(fs);
+await endpoint.open();                       // idle -> connecting -> ready (or faulted)
+const tools = await endpoint.listTools();    // readonly RemoteTool[], cached after first call
+const out = await endpoint.invoke("read_file", { path: "./README.md" });
+// out: RemoteCallResult { content: unknown[], isError: boolean }
+console.log(endpoint.status());              // { server, phase, toolCount, fault? }
+await endpoint.close();
+```
+
+`invoke` uses the **unqualified** server-side name. A result the server flagged `isError` is returned faithfully (not thrown); only genuine transport/protocol failures throw a `ProtocolFault`.
+
+### A fleet (failure isolation)
+
+```typescript
+const config: BridgeConfig = { servers: [fs, remote] };
+const fleet = await startServerFleet(config);  // connects all in parallel, isolating per-server failures
+
+for (const ep of fleet.endpoints()) {
+  console.log(ep.config.id, ep.phase);
+}
+console.log(fleet.status());                   // FleetStatus: Record<id, EndpointStatus>
+await fleet.tearDown();
+```
+
+A server that fails to connect is left in the `faulted` phase with its fault recorded; its healthy peers keep serving.
+
+### Mounting into the kernel
+
+```typescript
+import { mountProtocolBridge } from "indusagi/interop";
+
+const { box, fleet } = await mountProtocolBridge({ servers: [fs, remote] });
+// box: a runtime ToolBox of every grafted remote tool, named "<id>__<tool>"
+// fleet: the live ServerFleet backing those tools
+```
+
+`mountProtocolBridge` starts the fleet, lists each `ready` endpoint's tools, normalizes each remote `inputSchema` with `normalizeSchema`, and registers each as a kernel tool under its qualified `${id}__${tool}` name (`QUALIFIER` is `"__"`). Remote tools run with inert filesystem/shell backends since they execute on the remote server.
+
+### Fault handling
+
+```typescript
+import { isProtocolFault, isUsablePhase, isTerminalPhase } from "indusagi/interop";
+
+try {
+  await endpoint.invoke("do_thing", {});
+} catch (err) {
+  if (isProtocolFault(err)) {
+    // err.kind: "transport" | "protocol" | "timeout" | "tool_error" | "not_connected" | "spawn_failed"
+    console.error(err.kind, err.message);
+  }
+}
+
+isUsablePhase(endpoint.phase);    // true only when "ready"
+isTerminalPhase(endpoint.phase);  // true when "closed" or "faulted"
+```
+
+## 10. The interop provider host
+
+Source: `src/interop/protocol-bridge/host.ts`. `createProviderHost` stands up an SDK `Server` that publishes a runtime `ToolBox`'s tools to an external MCP client.
+
+```typescript
+import { createProviderHost } from "indusagi/interop";
+
+const host = createProviderHost(box, { name: "my-host", version: "1.0.0" });
+await host.connect(transport);   // transport is an @modelcontextprotocol/sdk Transport
+```
+
+The host registers `tools/list` (mapping each `box.descriptors()` entry to `{ name, description, inputSchema }`) and `tools/call` (routing into `box.runner.run` and projecting the `ToolOutcome` to `{ content: [{ type: "text", text }], isError }`). It is inert until `connect` binds it to a transport (stdio pipe, SSE stream, or an in-memory pair). When `info` is omitted it defaults to `{ name: "indus-provider-host", version: "0.1.0" }`.
+
+---
+
+For the complete export and type surface, see `api-reference.txt`. For the module map and the two-layer overview, see `README.txt`.

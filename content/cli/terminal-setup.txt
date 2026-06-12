@@ -1,65 +1,57 @@
 # Terminal Setup
 
-Indusagi uses the [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) for reliable modifier key detection. Most modern terminals support this protocol, but some require configuration.
+> Most terminals work out of the box. The notes below cover the few cases where a key needs help.
 
-## Kitty, iTerm2
+The console draws its own software caret and reads keys through Ink's input layer. It does not draw the hardware cursor by default. The only setup most users need is making sure `Shift+Enter` reaches the console as a distinct key so it can insert a soft newline.
 
-Work out of the box.
+## Soft newline
 
-## Ghostty
+The console reads `Shift+Enter` (a held shift with return) as a soft newline. If your terminal cannot distinguish `Shift+Enter` from a bare `Enter`, you can always use `Ctrl+J`, which the console treats as a newline regardless of terminal support.
 
-Add to your Ghostty config (`~/.config/ghostty/config`):
+## Hardware cursor
 
-```
-keybind = alt+backspace=text:\x1b\x7f
-keybind = shift+enter=text:\n
-```
-
-## WezTerm
-
-Create `~/.wezterm.lua`:
-
-```lua
-local wezterm = require 'wezterm'
-local config = wezterm.config_builder()
-config.enable_kitty_keyboard = true
-return config
-```
-
-## VS Code (Integrated Terminal)
-
-Add to `keybindings.json` to enable `Shift+Enter` for multi-line input:
+By default the console hides the terminal's own cursor and draws a software caret (the inverted block in the composer), which works everywhere. If you prefer the terminal's hardware cursor — for example to position an IME candidate window — turn on the `showHardwareCursor` preference:
 
 ```json
 {
-  "key": "shift+enter",
-  "command": "workbench.action.terminal.sendSequence",
-  "args": { "text": "\u001b[13;2u" },
-  "when": "terminalFocus"
+  "showHardwareCursor": true
 }
 ```
 
-## Windows Terminal
+You can also toggle it in `/settings` → "Hardware cursor". It is off by default for compatibility.
 
-Add to `settings.json` (Ctrl+Shift+, or Settings → Open JSON file):
+## Clipboard image paste
 
-```json
-{
-  "actions": [
-    {
-      "command": { "action": "sendInput", "input": "\u001b[13;2u" },
-      "keys": "shift+enter"
-    }
-  ]
-}
+`Ctrl+V` attaches an image from the OS clipboard. It shells out to a platform tool, so the tool must be installed:
+
+| Platform | Tool(s) tried |
+|----------|---------------|
+| macOS | `pngpaste` (falls back to `osascript`) |
+| Linux (Wayland) | `wl-paste --type image/png` |
+| Linux (X11) | `xclip -selection clipboard -t image/png -o` |
+
+If no image is on the clipboard, or the platform tool is missing, the console shows a "No image on the clipboard." status and leaves the buffer unchanged. Clipboard image paste is not supported on Windows (see [windows.md](windows.md)).
+
+On macOS install `pngpaste` with `brew install pngpaste`; on Linux install `wl-clipboard` (for `wl-paste`) or `xclip`.
+
+## External editor
+
+`Ctrl+G` opens the current composer buffer in an external editor and reads the edited text back. The editor command is resolved from `$VISUAL`, then `$EDITOR`, then a `vi` fallback. A command with flags is honoured (e.g. `EDITOR="code --wait"`).
+
+```bash
+export VISUAL="nvim"
+# or
+export EDITOR="code --wait"
 ```
 
-If you already have an `actions` array, add the object to it.
+## Terminal title
 
-## IntelliJ IDEA (Integrated Terminal)
+The console sets the terminal window/tab title to the live session name (falling back to `indus console`) via the standard OSC 2 control sequence. This is skipped automatically when stdout is not a TTY, so redirecting output to a file or pipe never leaks escape bytes.
 
-The built-in terminal has limited escape sequence support. Shift+Enter cannot be distinguished from Enter in IntelliJ's terminal.
+## Colours
 
-If you want the hardware cursor visible, set `INDUSAGI_HARDWARE_CURSOR=1` before running indusagi (disabled by default for compatibility).
+The console renders with 24-bit colours derived from the active scheme (see [themes.md](themes.md)). Most modern terminals support truecolor. Check yours:
 
-Consider using a dedicated terminal emulator for the best experience.
+```bash
+echo $COLORTERM  # "truecolor" or "24bit" indicates support
+```

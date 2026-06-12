@@ -6,15 +6,29 @@ import { renderMarkdown } from "./markdown";
 const CONTENT_DIR = path.join(process.cwd(), "content");
 
 // Indusagi package sections
-const PACKAGE_SECTION_ORDER = ["Start", "AI", "Agent", "TUI", "Reference"];
+const PACKAGE_SECTION_ORDER = ["Start", "Subsystems", "AI", "Agent", "TUI", "MCP", "Memory", "Reference"];
 const PACKAGE_SECTION_MAP: Array<{ prefix: string; section: string }> = [
+  { prefix: "subsystems/", section: "Subsystems" },
   { prefix: "ai/", section: "AI" },
   { prefix: "agent/", section: "Agent" },
   { prefix: "tui/", section: "TUI" },
+  { prefix: "mcp/", section: "MCP" },
+  { prefix: "memory/", section: "Memory" },
 ];
 const PACKAGE_SPECIAL_ORDER: Record<string, number> = {
   "README": 0,
   "getting-started": 1,
+  "architecture": 2,
+  "subsystems/llm-gateway": 10,
+  "subsystems/runtime": 11,
+  "subsystems/capabilities": 12,
+  "subsystems/interop-mcp": 13,
+  "subsystems/connectors-saas": 14,
+  "subsystems/swarm": 15,
+  "subsystems/smithy": 16,
+  "subsystems/tracing": 17,
+  "subsystems/shell-app": 18,
+  "subsystems/react-ink": 19,
   "package-exports": 90,
   "use-cases/security-testing": 91,
 };
@@ -23,7 +37,7 @@ const PACKAGE_SPECIAL_ORDER: Record<string, number> = {
 const CLI_SECTION_ORDER = ["Start", "SDK & API", "Customization", "Session", "Configuration", "UI", "Platform"];
 const CLI_SECTION_MAP: Array<{ match: (slug: string) => boolean; section: string }> = [
   { match: (slug) => ["sdk", "rpc", "json"].includes(slug), section: "SDK & API" },
-  { match: (slug) => ["extensions", "skills", "hooks", "subagents", "prompt-templates", "themes", "packages"].includes(slug), section: "Customization" },
+  { match: (slug) => ["extensions", "loading-extensions", "skills", "hooks", "subagents", "prompt-templates", "themes", "packages", "tools"].includes(slug), section: "Customization" },
   { match: (slug) => ["session", "tree", "compaction"].includes(slug), section: "Session" },
   { match: (slug) => ["settings", "models", "providers", "custom-provider", "keybindings"].includes(slug), section: "Configuration" },
   { match: (slug) => ["tui", "terminal-setup"].includes(slug), section: "UI" },
@@ -31,14 +45,17 @@ const CLI_SECTION_MAP: Array<{ match: (slug: string) => boolean; section: string
 ];
 const CLI_SPECIAL_ORDER: Record<string, number> = {
   "README": 0,
+  "architecture": 0.5,
   "providers": 1,
   "sdk": 2,
   "rpc": 3,
   "json": 4,
   "extensions": 10,
+  "loading-extensions": 10.5,
   "skills": 11,
   "hooks": 12,
   "subagents": 13,
+  "tools": 14,
   "session": 20,
   "tree": 21,
   "compaction": 22,

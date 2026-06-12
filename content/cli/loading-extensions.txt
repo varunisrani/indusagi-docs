@@ -1,198 +1,165 @@
-> Extensions enable powerful customization. Load them with `indusagi -e` or `--extension`.
-
 # Loading Extensions
 
-Extensions are TypeScript modules that extend indusagi's capabilities. They can add custom tools, commands, UI components, and more.
+Addons (extensions) are TypeScript modules discovered from disk and loaded into a
+running session. This page covers how the loader finds, resolves, and folds them,
+and the current wiring status.
 
-**Key Points:**
-- Load extensions with `-e` or `--extension` flag
-- Multiple extensions can be loaded at once
-- Extensions are auto-discovered from `.indusagi/` directory
-- Extensions can be local files, npm packages, or git repositories
+The loading machinery lives in `indus-code-rebuild/src/addons` — specifically
+`manifest.ts` (discovery), `sandbox.ts` (the jiti-backed loader), and `host.ts`
+(the assembly point). See [extensions](extensions.md) for the addon API itself.
+
+> **Status:** Discovery, the loader, and the host are fully implemented and
+> tested, but they are **not yet invoked by the CLI runner**. There is currently
+> no `--extension`/`-e` flag (the launch flag table in
+> `src/launch/invocation/flags.ts` defines only `--model`, `--thinking`, `--tools`,
+> `--no-tools`, `--mcp`, `--system`, `--append-system`, and the mode/session
+> flags). Auto-discovery at boot is not wired either. The code below is the
+> programmatic API you can call directly; treat the at-launch behavior as a
+> planned integration. See `FEATURE_GAP_ROADMAP.md`.
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
-- [Loading Methods](#loading-methods)
-  - [CLI Flag (-e)](#cli-flag--e)
-  - [Auto-Discovery](#auto-discovery)
-  - [Configuration File](#configuration-file)
-- [Extension Resolution](#extension-resolution)
-- [Loading Multiple Extensions](#loading-multiple-extensions)
-- [Troubleshooting](#troubleshooting)
+- [Discovery Directory](#discovery-directory)
+- [Recognised Module Shapes](#recognised-module-shapes)
+- [The Module Loader](#the-module-loader)
+- [Loading Programmatically](#loading-programmatically)
+- [Ordering and Conflicts](#ordering-and-conflicts)
+- [Faults](#faults)
 
-## Quick Start
+## Discovery Directory
 
-The simplest way to load an extension is with the `-e` flag:
+Discovery scans a per-workspace directory named by the exported constant
+`ADDONS_DIR`:
 
-```bash
-indusagi -e @indusagi/bg-process
-indusagi -e ./path/to/extension/index.ts
-indusagi -e my-custom-extension
+```typescript
+export const ADDONS_DIR = ".indus/addons" as const;
 ```
 
-## Loading Methods
+So addons live under `<workspace>/.indus/addons`. `discoverAddons(dir)` walks that
+directory one level deep and returns the absolute entry-module paths it finds,
+sorted by path for a deterministic load order. Hidden entries (dot-files and
+dot-directories) are skipped. A missing directory yields an empty list, not an
+error.
 
-### CLI Flag (-e)
+`discoverSources(discovery)` folds an `AddonDiscovery` config — a workspace root
+(optional), an override `dir` (defaults to `ADDONS_DIR`), and a list of
+`explicitPaths` — into the deduplicated, id-stamped `AddonSource[]` the host feeds
+to the loader:
 
-Use the `-e` or `--extension` flag to load extensions:
-
-```bash
-# Load a single extension
-indusagi -e @indusagi/bg-process
-
-# Load multiple extensions
-indusagi -e @indusagi/bg-process -e ./custom-extension.ts
-
-# Mix different sources
-indusagi -e npm:my-pkg -e file:/path/to/ext -e @scope/package
-```
-
-**Supported formats:**
-- Package name (installed via npm): `@indusagi/bg-process`, `my-extension`
-- File path (local TS file): `./src/my-extension.ts`, `/absolute/path/extension.ts`
-- npm scope: `npm:@scope/package`
-- Git URL: `git:github.com/user/repo`
-
-### Auto-Discovery
-
-Extensions are automatically discovered from these locations:
-
-```
-~/.indusagi/agent/extensions/    # User global extensions
-.indusagi/extensions/             # Project extensions
-node_modules/@indusagi/*/         # Installed npm packages with "indusagi" field
-```
-
-Any TypeScript file in these directories with default export will be loaded.
-
-### Configuration File
-
-Enable/disable extensions via `.indusagi/config.json`:
-
-```json
-{
-  "extensions": {
-    "disabled": ["my-extension", "@scope/other-ext"]
-  }
+```typescript
+interface AddonDiscovery {
+  workspace?: string;          // scans <workspace>/.indus/addons when set
+  dir?: string;                // override, relative to workspace
+  explicitPaths?: readonly string[];   // additional absolute entry modules
 }
 ```
 
-Or use interactive config:
+## Recognised Module Shapes
 
-```bash
-indusagi config
+Inside the addons directory, `manifest.ts` recognises three candidate shapes:
+
+1. **A bare module file** — `something.ts` / `.tsx` / `.mts` / `.cts` / `.js` /
+   `.mjs` / `.cjs` sitting directly in the directory *is* its own entry.
+2. **A package directory with a manifest field** — a subdirectory whose
+   `package.json` carries the field named by `ADDON_MANIFEST_FIELD` (`"indusAddon"`),
+   pointing at the entry module relative to that subdirectory.
+3. **A package directory with a conventional index** — a subdirectory with no
+   manifest field falls back to an `index.*` entry if one exists.
+
+```json
+// .indus/addons/my-addon/package.json
+{
+  "indusAddon": "./src/entry.ts"
+}
 ```
 
-## Extension Resolution
+An `AddonId` is derived for each entry (the enclosing folder name for an `index.*`
+file, otherwise the file's basename without extension), used for de-duplication and
+fault attribution. The full path is the ultimate uniqueness guarantee.
 
-When you load an extension, indusagi resolves it in this order:
+## The Module Loader
 
-1. **Local file path** - If path exists, load directly
-2. **npm package** - Check `node_modules/` for package
-3. **Scoped package** - Check `node_modules/@scope/package`
-4. **Global extensions** - Check `~/.indusagi/agent/extensions/`
-5. **Project extensions** - Check `.indusagi/extensions/`
+`createJitiLoader()` is the default `ModuleLoader` (`src/addons/sandbox.ts`). It
+builds one jiti instance bridging the framework `BUNDLED_NAMESPACES`
+(`indusagi/agent`, `indusagi/ai`, `indusagi/tui`, `@sinclair/typebox`) into the
+addon's module graph:
 
-The `-e` flag takes precedence over auto-discovery.
+- In a **compiled binary**: the specifiers map to the host's live namespace objects
+  via jiti's `virtualModules`, so the addon shares the host's exact module
+  instances.
+- Under **Node / `bun run` over source**: the specifiers resolve to real paths via
+  jiti's `alias`.
 
-## Loading Multiple Extensions
+Module caching is disabled, so re-loading an edited addon during a session picks up
+the new source. The loader normalizes the supplied path through `resolvePath`
+(home-`~` expansion + an invisible-whitespace scrub via `scrubInvisible`), imports
+it, and extracts the `AddonManifest`. A module that does not export a callable
+`register` is rejected, which the host converts into a `load` fault.
 
-Load multiple extensions to combine functionality:
+The loader is injectable: every consumer takes the `ModuleLoader` interface, so a
+test (or an embedder) can supply a fake that returns a scripted manifest with no
+jiti and no disk.
 
-```bash
-indusagi \
-  -e @indusagi/bg-process \
-  -e ./extensions/git-helper.ts \
-  -e custom-auth-extension
+## Loading Programmatically
+
+```typescript
+import { addons } from "indusagi-coding-agent";
+
+const host = addons.createAddonHost({
+  // handles?: FrameworkHandles  — threaded into each addon's surface
+  // loader?: ModuleLoader        — defaults to createJitiLoader()
+});
+
+host.onFault((fault) => console.error(`[${fault.kind}] ${fault.message}`));
+
+// Scan a workspace's .indus/addons directory:
+const bundle = await host.loadAll("/path/to/workspace");
+
+// Or pass a full discovery config with explicit paths:
+const bundle2 = await host.loadAll({
+  workspace: "/path/to/workspace",
+  explicitPaths: ["/abs/path/to/extra-addon.ts"],
+});
+
+// bundle: { dispatch, interceptors, commands, tools, loaded }
 ```
 
-**Order matters:** Extensions are loaded in the order specified. Earlier extensions can set up state that later extensions depend on.
+To graft a single, already-resolved addon (e.g. an always-on bundled one) without
+directory discovery, use `host.loadOne(source)`, where `source` is an
+`AddonSource` (`{ id, path }`). The `id` is a branded `AddonId`, so mint it with
+the exported `addons.addonId(...)` helper:
 
-### Example: Combining Extensions
-
-```bash
-# Load security (permissions), monitoring (processes), and dev tools (git)
-indusagi -e security-ext -e @indusagi/bg-process -e git-ext
+```typescript
+await host.loadOne({ id: addons.addonId("my-bundled-addon"), path: "/abs/entry.ts" });
 ```
 
-## Troubleshooting
+## Ordering and Conflicts
 
-### Extension not found
+Addons are folded in discovery order (then explicit-path order). That order is
+preserved everywhere it matters:
 
-```
-Error: Cannot resolve extension "my-ext"
-```
+- **Event dispatch** runs subscriptions in registration order; the first `gate` to
+  stop wins.
+- **Interceptors** apply `enter` forward and `exit` in reverse (onion ordering), so
+  the addon loaded first wraps the outermost layer.
+- **Commands and tools** are name-deduped: the first claimant wins, and a later
+  duplicate is dropped as a `"conflict"` fault. Command names also may not shadow
+  the reserved core actions (`help`, `quit`, `exit`, `clear`, `model`, `compact`).
 
-**Solutions:**
-- Check package is installed: `npm ls my-ext`
-- For local files, use relative path: `-e ./path/to/file.ts`
-- Check `.indusagi/config.json` is not disabling it
+## Faults
 
-### Module resolution errors
+A broken addon never aborts the others. Failures are isolated into typed
+`AddonFault`s routed to `host.onFault(...)`:
 
-```
-Error: Cannot find module "@indusagi/bg-process"
-```
-
-**Solutions:**
-- Install the package: `npm install @indusagi/bg-process`
-- Use full path if in local directory: `-e /full/path/index.ts`
-
-### TypeScript compilation errors
-
-Extension must have valid TypeScript syntax.
-
-**Solutions:**
-- Check imports are correct
-- Ensure TypeScript version matches
-- Run `tsc --noEmit` locally to check
-
-### Extension hooks not firing
-
-Extension loaded but doesn't seem to work.
-
-**Solutions:**
-- Check extension implements the hooks correctly
-- Enable debug logging: `DEBUG=indusagi:* indusagi`
-- Verify event names match: `session_start`, `tool_call`, etc.
-
-## Common Extension Patterns
-
-### Custom Tool Extension
-
-```bash
-indusagi -e ./my-tool-extension.ts
-```
-
-Extension registers a new tool callable by the LLM.
-
-### Permission Gate Extension
-
-```bash
-indusagi -e ./security-extension.ts
-```
-
-Extension intercepts tool calls and asks for confirmation.
-
-### Monitoring Extension
-
-```bash
-indusagi -e @indusagi/bg-process
-```
-
-Extension monitors background processes with real-time updates.
-
-### Custom Command Extension
-
-```bash
-indusagi -e ./commands-extension.ts
-```
-
-Extension adds new commands like `/mycommand`.
+| Kind | When |
+|------|------|
+| `load` | the module failed to resolve/import or had no `register` |
+| `register` | the addon's `register` threw |
+| `handler` | an event handler or interceptor stage threw at runtime |
+| `conflict` | a command/tool name was already claimed (or reserved) |
 
 ## See Also
 
-- [Extensions Guide](./extensions.txt) - Create your own extensions
-- [CLI Reference](./cli-reference.txt) - Full CLI options
-- [@indusagi/bg-process](../package/agent/bg-process.txt) - Process management extension
+- [Extensions](extensions.md) — the addon API and registration surface
+- [Hooks](hooks.md) — the event taxonomy
+- [Packages](packages.md) — sharing addon sources via the `install`/`list` commands

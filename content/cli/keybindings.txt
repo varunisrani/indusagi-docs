@@ -1,162 +1,100 @@
 # Keybindings
 
-All keyboard shortcuts can be customized via `~/.indusagi/agent/keybindings.json`. Each action can be bound to one or more keys.
+> Run `/keys` in the console to print this map live, grounded in the actual keymap.
 
-## Key Format
+The console's keyboard shortcuts are fixed, not user-configurable: each raw key event is classified by the pure keymap in `src/console/input/keymap.ts` (`readKey`) into a console intent, and the surface's input handler (`src/console/components/TerminalConsole.tsx`) maps that intent to an effect. There is no `keybindings.json` file. The live `/keys` command renders the same map from the `HOTKEYS` table in `src/console/slash/commands/workbench.ts`.
 
-`modifier+key` where modifiers are `ctrl`, `shift`, `alt` (combinable) and keys are:
+## Table of Contents
 
-- **Letters:** `a-z`
-- **Special:** `escape`, `esc`, `enter`, `return`, `tab`, `space`, `backspace`, `delete`, `insert`, `clear`, `home`, `end`, `pageUp`, `pageDown`, `up`, `down`, `left`, `right`
-- **Function:** `f1`-`f12`
-- **Symbols:** `` ` ``, `-`, `=`, `[`, `]`, `\`, `;`, `'`, `,`, `.`, `/`, `!`, `@`, `#`, `$`, `%`, `^`, `&`, `*`, `(`, `)`, `_`, `+`, `|`, `~`, `{`, `}`, `:`, `<`, `>`, `?`
+- [Editing and navigation](#editing-and-navigation)
+- [Submitting and flow](#submitting-and-flow)
+- [Completion](#completion)
+- [Models and reasoning](#models-and-reasoning)
+- [Overlays and views](#overlays-and-views)
+- [Chords](#chords)
+- [Shell escape](#shell-escape)
+- [Notes on key delivery](#notes-on-key-delivery)
 
-Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, etc.
+## Editing and navigation
 
-## All Actions
+| Key | Action |
+|-----|--------|
+| `Left` / `Right` | Move the caret one column |
+| `Up` / `Down` | Recall older / newer history (or move the completion highlight when one is open) |
+| `Ctrl+A` | Jump to the start of the line |
+| `Ctrl+E` | Jump to the end of the line |
+| `Page Up` | Jump to buffer start |
+| `Page Down` | Jump to buffer end |
+| `Backspace` | Delete the character before the caret |
+| `Ctrl+U` | Clear the composer line |
+| `Ctrl+J` | Insert a newline |
+| `Shift+Enter` | Insert a soft newline |
 
-### Cursor Movement
+## Submitting and flow
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `cursorUp` | `up` | Move cursor up |
-| `cursorDown` | `down` | Move cursor down |
-| `cursorLeft` | `left` | Move cursor left |
-| `cursorRight` | `right` | Move cursor right |
-| `cursorWordLeft` | `alt+left`, `ctrl+left` | Move cursor word left |
-| `cursorWordRight` | `alt+right`, `ctrl+right` | Move cursor word right |
-| `cursorLineStart` | `home`, `ctrl+a` | Move to line start |
-| `cursorLineEnd` | `end`, `ctrl+e` | Move to line end |
-| `pageUp` | `pageUp` | Scroll up by page |
-| `pageDown` | `pageDown` | Scroll down by page |
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit the current turn |
+| `Esc` | Dismiss an open overlay; otherwise abort the in-flight turn; otherwise clear the completion highlight |
+| `Ctrl+C` | Abort a running turn; else clear the composer; a second press on an already-empty buffer within ~500 ms exits |
+| `Ctrl+Z` | Suspend the process to the background (job control) |
+| `Ctrl+G` | Hand the composer buffer to your external editor (`$VISUAL`, then `$EDITOR`, then `vi`) and read it back |
+| `Ctrl+V` | Attach an image from the clipboard (macOS / Linux) |
 
-### Deletion
+## Completion
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `deleteCharBackward` | `backspace` | Delete character backward |
-| `deleteCharForward` | `delete` | Delete character forward |
-| `deleteWordBackward` | `ctrl+w`, `alt+backspace` | Delete word backward |
-| `deleteWordForward` | `alt+d`, `alt+delete` | Delete word forward |
-| `deleteToLineStart` | `ctrl+u` | Delete to line start |
-| `deleteToLineEnd` | `ctrl+k` | Delete to line end |
+| Key | Action |
+|-----|--------|
+| `Tab` | Accept the highlighted completion; with none offered, insert a two-space indent |
+| `Up` / `Down` | Move the completion highlight (when the completion window is open) |
+| `Enter` | With a `/`-command completion open, run the highlighted command; otherwise submit the line as typed |
 
-### Text Input
+## Models and reasoning
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `newLine` | `shift+enter` | Insert new line |
-| `submit` | `enter` | Submit input |
-| `tab` | `tab` | Tab / autocomplete |
+| Key | Action |
+|-----|--------|
+| `Ctrl+L` | Open the model picker overlay |
+| `Ctrl+N` / `Ctrl+P` | Cycle the active model |
+| `Shift+Tab` | Step the reasoning-effort (thinking) level |
+| `Ctrl+T` | Toggle the reasoning / thinking rows |
 
-### Kill Ring
+## Overlays and views
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `yank` | `ctrl+y` | Paste most recently deleted text |
-| `yankPop` | `alt+y` | Cycle through deleted text after yank |
-| `undo` | `ctrl+-` | Undo last edit |
+| Key | Action |
+|-----|--------|
+| `Ctrl+R` | Open the session resume list |
+| `Ctrl+O` | Expand or collapse full tool output |
+| `Alt+Up` | Pull the newest queued input back into the composer |
 
-### Clipboard
+## Chords
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `copy` | `ctrl+c` | Copy selection |
-| `pasteImage` | `ctrl+v` | Paste image from clipboard |
+Two double-tap chords are latched across keystrokes (the second tap must land within ~600 ms):
 
-### Application
+| Chord | Action |
+|-------|--------|
+| `Esc Esc` | Double-escape — its effect is set by the `doubleEscapeAction` preference (see below) |
+| `Ctrl+U` `Ctrl+U` | A second `Ctrl+U` within the chord window requests exit (the chord does not check whether the buffer is empty) |
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `interrupt` | `escape` | Cancel / abort |
-| `clear` | `ctrl+c` | Clear editor |
-| `exit` | `ctrl+d` | Exit (when editor empty) |
-| `suspend` | `ctrl+z` | Suspend to background |
-| `externalEditor` | `ctrl+g` | Open in external editor (`$VISUAL` or `$EDITOR`) |
+`doubleEscapeAction` controls what `Esc Esc` does:
 
-### Models & Thinking
+| Value | Effect |
+|-------|--------|
+| `tree` (or legacy `branch`) | Open the transcript-tree navigator |
+| `fork` (or legacy `rewind`) | Open the prior-turn fork picker |
+| `clear` | Wipe the composer buffer (the default) |
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `selectModel` | `ctrl+l` | Open model selector |
-| `cycleModelForward` | `ctrl+p` | Cycle to next model |
-| `cycleModelBackward` | `shift+ctrl+p` | Cycle to previous model |
-| `cycleThinkingLevel` | `shift+tab` | Cycle thinking level |
+An unreadable or unknown value falls back to `clear`.
 
-### Display
+## Shell escape
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `expandTools` | `ctrl+o` | Collapse/expand tool output |
-| `toggleThinking` | `ctrl+t` | Collapse/expand thinking blocks |
+| Prefix | Action |
+|--------|--------|
+| `! <cmd>` | Run a shell command and keep its output in the conversation context |
+| `!! <cmd>` | Run a shell command but exclude its output from context |
 
-### Message Queue
+## Notes on key delivery
 
-| Action | Default | Description |
-|--------|---------|-------------|
-| `followUp` | `alt+enter` | Queue follow-up message |
-| `dequeue` | `alt+up` | Restore queued messages to editor |
-
-### Selection (Lists, Pickers)
-
-| Action | Default | Description |
-|--------|---------|-------------|
-| `selectUp` | `up` | Move selection up |
-| `selectDown` | `down` | Move selection down |
-| `selectPageUp` | `pageUp` | Page up in list |
-| `selectPageDown` | `pageDown` | Page down in list |
-| `selectConfirm` | `enter` | Confirm selection |
-| `selectCancel` | `escape`, `ctrl+c` | Cancel selection |
-
-### Session Picker
-
-| Action | Default | Description |
-|--------|---------|-------------|
-| `toggleSessionPath` | `ctrl+p` | Toggle path display |
-| `toggleSessionSort` | `ctrl+s` | Toggle sort mode |
-| `renameSession` | `ctrl+r` | Rename session |
-| `deleteSession` | `ctrl+d` | Delete session |
-| `deleteSessionNoninvasive` | `ctrl+backspace` | Delete session (when query empty) |
-
-## Custom Configuration
-
-Create `~/.indusagi/agent/keybindings.json`:
-
-```json
-{
-  "cursorUp": ["up", "ctrl+p"],
-  "cursorDown": ["down", "ctrl+n"],
-  "deleteWordBackward": ["ctrl+w", "alt+backspace"]
-}
-```
-
-Each action can have a single key or an array of keys. User config overrides defaults.
-
-### Emacs Example
-
-```json
-{
-  "cursorUp": ["up", "ctrl+p"],
-  "cursorDown": ["down", "ctrl+n"],
-  "cursorLeft": ["left", "ctrl+b"],
-  "cursorRight": ["right", "ctrl+f"],
-  "cursorWordLeft": ["alt+left", "alt+b"],
-  "cursorWordRight": ["alt+right", "alt+f"],
-  "deleteCharForward": ["delete", "ctrl+d"],
-  "deleteCharBackward": ["backspace", "ctrl+h"],
-  "newLine": ["shift+enter", "ctrl+j"]
-}
-```
-
-### Vim Example
-
-```json
-{
-  "cursorUp": ["up", "alt+k"],
-  "cursorDown": ["down", "alt+j"],
-  "cursorLeft": ["left", "alt+h"],
-  "cursorRight": ["right", "alt+l"],
-  "cursorWordLeft": ["alt+left", "alt+b"],
-  "cursorWordRight": ["alt+right", "alt+w"]
-}
-```
+- `Backspace` is folded across several deliveries: terminals report it as `key.backspace`, `key.delete` (macOS), or a raw `DEL` (`0x7f`) / `BS` (`0x08`) byte — all map to erase-backward.
+- A real `Escape` press arrives with an empty `input` and the meta flag set; bracketed-paste delimiters (`ESC[200~` / `ESC[201~`) are stripped before classification so a paste is never mistaken for an Escape.
+- Control bytes that also ride in the typed `input` are dropped, so `Ctrl+U` never also types "u".
+- Printable text accumulates into a short-debounce burst (12 ms) so a character-by-character paste lands whole.

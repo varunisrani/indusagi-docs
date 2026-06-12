@@ -2,19 +2,30 @@
 
 # Prompt Templates
 
-Prompt templates are Markdown snippets that expand into full prompts. Type `/name` in the editor to invoke a template, where `name` is the filename without `.md`.
+Prompt templates (macros) are markdown snippets that expand into full prompts. Type
+`/name` in the editor — where `name` is the filename without `.md` — to invoke one;
+the expansion is submitted as a normal turn.
+
+The implementation is `indus-code-rebuild/src/briefing/macros.ts` (the scanner,
+resolver, and loader) and `src/console/slash/commands/dynamic.ts` (the slash-command
+rows).
 
 ## Locations
 
-Indusagi loads prompt templates from:
+Templates are discovered from two roots, **project before user** (so a project
+template shadows a user one of the same name), defined in `src/console/startup.ts`
+and `src/console/slash/builtins.ts`:
 
-- Global: `~/.indusagi/agent/prompts/*.md`
-- Project: `.indusagi/prompts/*.md`
-- Packages: `prompts/` directories or `indusagi.prompts` entries in `package.json`
-- Settings: `prompts` array with files or directories
-- CLI: `--prompt-template <path>` (repeatable)
+- Project: `<cwd>/.indusagi/commands/`
+- User: `<home>/.indusagi/commands/`
 
-Disable discovery with `--no-prompt-templates`.
+Loading is **non-recursive**: only the direct `*.md` children of each directory are
+loaded (`loadMacros`). Hidden files (dot-prefixed) are skipped. Names are deduped
+across roots, first root wins.
+
+> **Note:** Unlike older docs, there is no `--prompt-template` /
+> `--no-prompt-templates` CLI flag and no `prompts` settings array. The directory is
+> `commands/`, not `prompts/`. The two roots above are the only sources.
 
 ## Format
 
@@ -28,27 +39,39 @@ Review the staged changes (`git diff --cached`). Focus on:
 - Error handling gaps
 ```
 
-- The filename becomes the command name. `review.md` becomes `/review`.
-- `description` is optional. If missing, the first non-empty line is used.
+- The filename (without `.md`) becomes the command name. `review.md` → `/review`.
+- `description` is optional. When present it is suffixed with the source label
+  (`project` or `user`); when absent, a description is derived from the first
+  non-blank body line (capped, then labelled). See `readMacroFile`.
 
 ## Usage
 
-Type `/` followed by the template name in the editor. Autocomplete shows available templates with descriptions.
+Type `/` followed by the template name in the editor. Autocomplete shows available
+templates with their descriptions.
 
 ```
-/review                           # Expands review.md
-/component Button                 # Expands with argument
-/component Button "click handler" # Multiple arguments
+/review                           # expands review.md
+/component Button                 # expands with one argument
+/component Button "click handler" # quoted runs become a single argument
 ```
+
+The argument string after the command name is split quote-aware (single- or
+double-quoted runs become one argument with their quotes removed), per
+`buildMacroScope`.
 
 ## Arguments
 
-Templates support positional arguments and simple slicing:
+The native placeholder form is `{{arg.…}}`; a legacy `$arg` form is also accepted as
+a compatibility shim. Both resolve in one pass against the parsed arguments.
 
-- `$1`, `$2`, ... positional args
-- `$@` or `$ARGUMENTS` for all args joined
-- `${@:N}` for args from the Nth position (1-indexed)
-- `${@:N:L}` for `L` args starting at N
+| Native | Legacy | Expands to |
+|--------|--------|-----------|
+| `{{arg.N}}` | `$1`, `$2`, … | the Nth positional argument (1-based) |
+| `{{arg.all}}` | `$@`, `${@}`, `$ARGUMENTS` | all arguments joined with single spaces |
+| `{{arg.slice N}}` | `${@:N}` | arguments from the Nth position (1-based) |
+| `{{arg.slice N L}}` | `${@:N:L}` | `L` arguments starting at N |
+
+`{{{{` collapses to a literal `{{`, and `$$` to a literal `$`.
 
 Example:
 
@@ -56,12 +79,20 @@ Example:
 ---
 description: Create a component
 ---
-Create a React component named $1 with features: $@
+Create a React component named {{arg.1}} with features: {{arg.all}}
 ```
 
 Usage: `/component Button "onClick handler" "disabled support"`
 
 ## Loading Rules
 
-- Template discovery in `prompts/` is non-recursive.
-- If you want templates in subdirectories, add them explicitly via `prompts` settings or a package manifest.
+- Discovery in `commands/` is **non-recursive** — only direct `*.md` files load.
+- Each template is exposed as a `/<name>` slash command whose `run` expands the body
+  against the trailing arguments (`applyMacros`) and submits the result as a turn.
+- A template whose name would shadow a built-in command (or another template loaded
+  first) is dropped.
+
+## Related
+
+- [Skills](skills.md) — on-demand instruction packages invoked as `/skill:<name>`
+- [Extensions](extensions.md) — addons that register their own `/name` commands
