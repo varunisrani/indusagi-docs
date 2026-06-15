@@ -240,3 +240,178 @@ export async function getDefaultCLIDocSlug(): Promise<string[]> {
   }
   return ["README"];
 }
+
+// Python rebuild docs (indusagi for Python)
+const PYTHON_SECTION_ORDER = ["Start", "Facades", "Subsystems", "UI", "Reference"];
+const PYTHON_SECTION_MAP: Array<{ prefix: string; section: string }> = [
+  { prefix: "facades/", section: "Facades" },
+  { prefix: "subsystems/", section: "Subsystems" },
+  { prefix: "ui/", section: "UI" },
+  { prefix: "reference/", section: "Reference" },
+];
+const PYTHON_SPECIAL_ORDER: Record<string, number> = {
+  "README": 0,
+  "getting-started": 1,
+  "architecture": 2,
+  "facades/ai": 10,
+  "facades/agent": 11,
+  "facades/mcp": 12,
+  "facades/memory": 13,
+  "subsystems/llm-gateway": 20,
+  "subsystems/runtime": 21,
+  "subsystems/capabilities": 22,
+  "subsystems/interop": 23,
+  "subsystems/connectors": 24,
+  "subsystems/swarm": 25,
+  "subsystems/smithy": 26,
+  "subsystems/tracing": 27,
+  "subsystems/shell-app": 28,
+  "ui/tui": 40,
+  "ui/react-ink": 41,
+  "ui/ui-bridge": 42,
+  "reference/package-exports": 60,
+  "reference/cli": 61,
+  "reference/examples": 62,
+  "reference/testing": 63,
+  "reference/parity": 64,
+};
+
+function pickPythonSection(slug: string): string {
+  for (const { prefix, section } of PYTHON_SECTION_MAP) {
+    if (slug.startsWith(prefix)) return section;
+  }
+  return "Start";
+}
+
+export async function getPythonDocsManifest(): Promise<DocEntry[]> {
+  const paths = await readDocPaths("python");
+  const docs = await Promise.all(
+    paths.map(async (filePath) => {
+      const slug = slugFromFile(filePath, "python");
+      const title = await getTitleFromFile(filePath);
+      const section = pickPythonSection(slug);
+      const order = PYTHON_SPECIAL_ORDER[slug] ?? 100;
+      return { slug, title, section, order };
+    }),
+  );
+
+  docs.sort((a, b) => sortDocs(a, b, PYTHON_SECTION_ORDER));
+  return docs;
+}
+
+export async function getPythonDocBySlug(slugParts: string[]): Promise<DocContent | null> {
+  const slug = slugParts.join("/");
+  const filePath = path.join(CONTENT_DIR, "python", `${slug}.txt`);
+
+  try {
+    const markdown = await fs.readFile(filePath, "utf-8");
+    const { title, body } = stripTitle(markdown);
+    const { html, toc } = renderMarkdown(body);
+    const section = pickPythonSection(slug);
+    return { slug, title, section, html, raw: body, toc };
+  } catch {
+    return null;
+  }
+}
+
+export async function getDefaultPythonDocSlug(): Promise<string[]> {
+  const preferred = ["getting-started", "README"];
+  for (const slug of preferred) {
+    try {
+      await fs.access(path.join(CONTENT_DIR, "python", `${slug}.txt`));
+      return [slug];
+    } catch {
+      // continue
+    }
+  }
+  return ["README"];
+}
+
+// Python coding-agent CLI docs (induscode)
+const PYTHON_CLI_SECTION_ORDER = ["Start", "Console", "Subsystems", "Configuration", "Reference"];
+const PYTHON_CLI_SECTION_MAP: Array<{ prefix: string; section: string }> = [
+  { prefix: "console/", section: "Console" },
+  { prefix: "subsystems/", section: "Subsystems" },
+  { prefix: "configuration/", section: "Configuration" },
+  { prefix: "reference/", section: "Reference" },
+];
+const PYTHON_CLI_SPECIAL_ORDER: Record<string, number> = {
+  "README": 0,
+  "getting-started": 1,
+  "architecture": 2,
+  "console/overview": 10,
+  "console/slash-commands": 11,
+  "console/dialogs": 12,
+  "console/theming": 13,
+  "subsystems/launch": 20,
+  "subsystems/boot": 21,
+  "subsystems/conductor": 22,
+  "subsystems/runtime-bridge": 23,
+  "subsystems/capability-deck": 24,
+  "subsystems/channels": 25,
+  "subsystems/sessions": 26,
+  "subsystems/window-budget": 27,
+  "subsystems/transcript-export": 28,
+  "subsystems/briefing": 29,
+  "subsystems/addons": 30,
+  "subsystems/insight": 31,
+  "configuration/settings": 40,
+  "configuration/auth": 41,
+  "configuration/models": 42,
+  "configuration/mcp": 43,
+  "reference/cli": 60,
+  "reference/package-exports": 61,
+  "reference/parity": 62,
+  "reference/testing": 63,
+};
+
+function pickPythonCliSection(slug: string): string {
+  for (const { prefix, section } of PYTHON_CLI_SECTION_MAP) {
+    if (slug.startsWith(prefix)) return section;
+  }
+  return "Start";
+}
+
+export async function getPythonCliDocsManifest(): Promise<DocEntry[]> {
+  const paths = await readDocPaths("python-cli");
+  const docs = await Promise.all(
+    paths.map(async (filePath) => {
+      const slug = slugFromFile(filePath, "python-cli");
+      const title = await getTitleFromFile(filePath);
+      const section = pickPythonCliSection(slug);
+      const order = PYTHON_CLI_SPECIAL_ORDER[slug] ?? 100;
+      return { slug, title, section, order };
+    }),
+  );
+
+  docs.sort((a, b) => sortDocs(a, b, PYTHON_CLI_SECTION_ORDER));
+  return docs;
+}
+
+export async function getPythonCliDocBySlug(slugParts: string[]): Promise<DocContent | null> {
+  const slug = slugParts.join("/");
+  const filePath = path.join(CONTENT_DIR, "python-cli", `${slug}.txt`);
+
+  try {
+    const markdown = await fs.readFile(filePath, "utf-8");
+    const { title, body } = stripTitle(markdown);
+    const { html, toc } = renderMarkdown(body);
+    const section = pickPythonCliSection(slug);
+    return { slug, title, section, html, raw: body, toc };
+  } catch {
+    return null;
+  }
+}
+
+export async function getDefaultPythonCliDocSlug(): Promise<string[]> {
+  const preferred = ["getting-started", "README"];
+  for (const slug of preferred) {
+    try {
+      await fs.access(path.join(CONTENT_DIR, "python-cli", `${slug}.txt`));
+      return [slug];
+    } catch {
+      // continue
+    }
+  }
+  return ["README"];
+}
