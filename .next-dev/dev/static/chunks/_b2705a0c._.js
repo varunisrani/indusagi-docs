@@ -711,7 +711,7 @@ function HeroInstall() {
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "inline-flex gap-1 mt-[34px] p-1 rounded-full border border-[color:var(--border)]",
+                className: "inline-flex max-w-full gap-1 mt-[34px] p-1 rounded-full border border-[color:var(--border)]",
                 style: {
                     background: "var(--surface)"
                 },
@@ -721,6 +721,7 @@ function HeroInstall() {
                         children: [
                             p.label,
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                className: "hidden sm:inline",
                                 style: {
                                     opacity: 0.6,
                                     fontWeight: 400,
@@ -760,12 +761,12 @@ function HeroInstall() {
                                 children: t.label
                             }, t.id, false, {
                                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                                lineNumber: 120,
+                                lineNumber: 122,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/app/_components/HeroInstall.tsx",
-                        lineNumber: 118,
+                        lineNumber: 120,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -789,14 +790,14 @@ function HeroInstall() {
                                         children: "$"
                                     }, void 0, false, {
                                         fileName: "[project]/app/_components/HeroInstall.tsx",
-                                        lineNumber: 130,
+                                        lineNumber: 132,
                                         columnNumber: 13
                                     }, this),
                                     cmd
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                                lineNumber: 129,
+                                lineNumber: 131,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -812,19 +813,19 @@ function HeroInstall() {
                                 children: copied ? "✓ Copied" : "⧉ Copy"
                             }, void 0, false, {
                                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                                lineNumber: 133,
+                                lineNumber: 135,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/_components/HeroInstall.tsx",
-                        lineNumber: 125,
+                        lineNumber: 127,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                lineNumber: 114,
+                lineNumber: 116,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -836,7 +837,7 @@ function HeroInstall() {
                 children: "Requires Node 20+ (npm), Python 3.11+ (pip), or Rust 1.96+ (cargo). Set a provider key, then run."
             }, void 0, false, {
                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                lineNumber: 149,
+                lineNumber: 151,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -853,7 +854,7 @@ function HeroInstall() {
                         children: "Read the docs"
                     }, void 0, false, {
                         fileName: "[project]/app/_components/HeroInstall.tsx",
-                        lineNumber: 154,
+                        lineNumber: 156,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -868,13 +869,13 @@ function HeroInstall() {
                         children: "★ Star on GitHub"
                     }, void 0, false, {
                         fileName: "[project]/app/_components/HeroInstall.tsx",
-                        lineNumber: 161,
+                        lineNumber: 163,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/_components/HeroInstall.tsx",
-                lineNumber: 153,
+                lineNumber: 155,
                 columnNumber: 7
             }, this)
         ]

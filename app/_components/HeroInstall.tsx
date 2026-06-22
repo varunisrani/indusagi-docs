@@ -99,13 +99,15 @@ export function HeroInstall() {
 
       {/* Product toggle */}
       <div
-        className="inline-flex gap-1 mt-[34px] p-1 rounded-full border border-[color:var(--border)]"
+        className="inline-flex max-w-full gap-1 mt-[34px] p-1 rounded-full border border-[color:var(--border)]"
         style={{ background: "var(--surface)" }}
       >
         {PRODUCTS.map((p) => (
           <button key={p.id} onClick={() => setProduct(p.id)} style={pill(product === p.id)}>
             {p.label}
-            <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 7 }}>{p.sub}</span>
+            <span className="hidden sm:inline" style={{ opacity: 0.6, fontWeight: 400, marginLeft: 7 }}>
+              {p.sub}
+            </span>
           </button>
         ))}
       </div>

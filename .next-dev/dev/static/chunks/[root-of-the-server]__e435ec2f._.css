@@ -1293,6 +1293,18 @@
     max-width: 1320px;
   }
 
+  .max-w-\[V�\$\] {
+    max-width: V�$ ;
+  }
+
+  .max-w-\[y\~\$\] {
+    max-width: y~ $ ;
+  }
+
+  .max-w-full {
+    max-width: 100%;
+  }
+
   .min-w-0 {
     min-width: calc(var(--spacing) * 0);
   }
@@ -2107,6 +2119,12 @@
   }
 
   @media (min-width: 40rem) {
+    .sm\:inline {
+      display: inline;
+    }
+  }
+
+  @media (min-width: 40rem) {
     .sm\:inline-flex {
       display: inline-flex;
     }
@@ -2362,6 +2380,7 @@ html {
   color: var(--fg);
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  overflow-x: clip;
 }
 
 body {
