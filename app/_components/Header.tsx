@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// The four documentation families, in nav order. A single "Docs" dropdown lists them all.
+// The six documentation families, in nav order. A single "Docs" dropdown lists them all.
 const DOC_FAMILIES = [
   { href: "/docs", label: "IndusAGI (TypeScript)", note: "Framework", badge: "TS", from: "from-[#fe6027]", to: "to-[#ff8a50]", accent: "#ff7a45" },
   { href: "/cli", label: "IndusAGI Coding Agent (TypeScript)", note: "Coding-agent CLI", badge: "TS", from: "from-cyan-500", to: "to-teal-600", accent: "#22d3ee" },
   { href: "/python", label: "IndusAGI (Python)", note: "Framework", badge: "PY", from: "from-emerald-500", to: "to-green-600", accent: "#34d399" },
   { href: "/python-cli", label: "IndusAGI Coding Agent (Python)", note: "Coding-agent CLI", badge: "PY", from: "from-violet-500", to: "to-purple-600", accent: "#a78bfa" },
+  { href: "/rust", label: "IndusAGI (Rust)", note: "Framework", badge: "RS", from: "from-amber-400", to: "to-orange-600", accent: "#fbbf24" },
+  { href: "/rust-cli", label: "IndusAGI Coding Agent (Rust)", note: "Coding-agent CLI", badge: "RS", from: "from-rose-500", to: "to-pink-600", accent: "#f43f5e" },
 ];
 
 export function Header() {
@@ -23,10 +25,13 @@ export function Header() {
   const isCLI = pathname.startsWith("/cli");
   const isPythonCli = pathname.startsWith("/python-cli");
   const isPython = pathname.startsWith("/python") && !isPythonCli;
-  // /python-cli also starts with /python, so the framework match must exclude it.
+  const isRustCli = pathname.startsWith("/rust-cli");
+  const isRust = pathname.startsWith("/rust") && !isRustCli;
+  // /python-cli also starts with /python (and /rust-cli with /rust), so the
+  // framework matches must exclude their coding-agent siblings.
   const isActiveFamily = (href: string) =>
-    href === "/python" ? isPython : pathname.startsWith(href);
-  const anyDocsActive = isDocs || isCLI || isPython || isPythonCli;
+    href === "/python" ? isPython : href === "/rust" ? isRust : pathname.startsWith(href);
+  const anyDocsActive = isDocs || isCLI || isPython || isPythonCli || isRust || isRustCli;
 
   useEffect(() => {
     // Close menus on route change

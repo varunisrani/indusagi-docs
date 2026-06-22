@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { getPackageDocsManifest, getCLIDocsManifest, getPythonDocsManifest, getPythonCliDocsManifest } from './lib/docs';
+import { getPackageDocsManifest, getCLIDocsManifest, getPythonDocsManifest, getPythonCliDocsManifest, getRustDocsManifest, getRustCliDocsManifest } from './lib/docs';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://www.indusagi.com';
@@ -10,6 +10,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/cli`, lastModified: new Date() },
     { url: `${baseUrl}/python`, lastModified: new Date() },
     { url: `${baseUrl}/python-cli`, lastModified: new Date() },
+    { url: `${baseUrl}/rust`, lastModified: new Date() },
+    { url: `${baseUrl}/rust-cli`, lastModified: new Date() },
     { url: `${baseUrl}/use-cases/coding-agent`, lastModified: new Date() },
     { url: `${baseUrl}/use-cases/memory-management`, lastModified: new Date() },
     { url: `${baseUrl}/indusagi-vs-cursor`, lastModified: new Date() },
@@ -47,5 +49,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'weekly' as const,
   }));
 
-  return [...staticPages, ...packageDocEntries, ...cliDocEntries, ...pythonDocEntries, ...pythonCliDocEntries];
+  const rustDocs = await getRustDocsManifest();
+  const rustDocEntries = rustDocs.map((doc) => ({
+    url: `${baseUrl}/rust/${doc.slug}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+  }));
+
+  const rustCliDocs = await getRustCliDocsManifest();
+  const rustCliDocEntries = rustCliDocs.map((doc) => ({
+    url: `${baseUrl}/rust-cli/${doc.slug}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+  }));
+
+  return [...staticPages, ...packageDocEntries, ...cliDocEntries, ...pythonDocEntries, ...pythonCliDocEntries, ...rustDocEntries, ...rustCliDocEntries];
 }

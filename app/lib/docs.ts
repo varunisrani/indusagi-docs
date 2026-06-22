@@ -415,3 +415,173 @@ export async function getDefaultPythonCliDocSlug(): Promise<string[]> {
   }
   return ["README"];
 }
+
+// Rust rebuild docs (indusagi for Rust — the framework)
+const RUST_SECTION_ORDER = ["Start", "Subsystems", "UI", "Reference"];
+const RUST_SECTION_MAP: Array<{ prefix: string; section: string }> = [
+  { prefix: "subsystems/", section: "Subsystems" },
+  { prefix: "ui/", section: "UI" },
+  { prefix: "reference/", section: "Reference" },
+];
+const RUST_SPECIAL_ORDER: Record<string, number> = {
+  "README": 0,
+  "getting-started": 1,
+  "architecture": 2,
+  "subsystems/core": 10,
+  "subsystems/llm-gateway": 11,
+  "subsystems/runtime": 12,
+  "subsystems/capabilities": 13,
+  "subsystems/interop": 14,
+  "subsystems/connectors": 15,
+  "subsystems/swarm": 16,
+  "subsystems/smithy": 17,
+  "subsystems/tracing": 18,
+  "subsystems/shell-app": 19,
+  "subsystems/facade": 20,
+  "ui/tui": 40,
+  "ui/tui-render": 41,
+  "reference/cli": 60,
+  "reference/crate-exports": 61,
+  "reference/testing": 62,
+  "reference/parity": 63,
+};
+
+function pickRustSection(slug: string): string {
+  for (const { prefix, section } of RUST_SECTION_MAP) {
+    if (slug.startsWith(prefix)) return section;
+  }
+  return "Start";
+}
+
+export async function getRustDocsManifest(): Promise<DocEntry[]> {
+  const paths = await readDocPaths("rust");
+  const docs = await Promise.all(
+    paths.map(async (filePath) => {
+      const slug = slugFromFile(filePath, "rust");
+      const title = await getTitleFromFile(filePath);
+      const section = pickRustSection(slug);
+      const order = RUST_SPECIAL_ORDER[slug] ?? 100;
+      return { slug, title, section, order };
+    }),
+  );
+
+  docs.sort((a, b) => sortDocs(a, b, RUST_SECTION_ORDER));
+  return docs;
+}
+
+export async function getRustDocBySlug(slugParts: string[]): Promise<DocContent | null> {
+  const slug = slugParts.join("/");
+  const filePath = path.join(CONTENT_DIR, "rust", `${slug}.txt`);
+
+  try {
+    const markdown = await fs.readFile(filePath, "utf-8");
+    const { title, body } = stripTitle(markdown);
+    const { html, toc } = renderMarkdown(body);
+    const section = pickRustSection(slug);
+    return { slug, title, section, html, raw: body, toc };
+  } catch {
+    return null;
+  }
+}
+
+export async function getDefaultRustDocSlug(): Promise<string[]> {
+  const preferred = ["getting-started", "README"];
+  for (const slug of preferred) {
+    try {
+      await fs.access(path.join(CONTENT_DIR, "rust", `${slug}.txt`));
+      return [slug];
+    } catch {
+      // continue
+    }
+  }
+  return ["README"];
+}
+
+// Rust coding-agent CLI docs (induscode for Rust)
+const RUST_CLI_SECTION_ORDER = ["Start", "Console", "Subsystems", "Configuration", "Reference"];
+const RUST_CLI_SECTION_MAP: Array<{ prefix: string; section: string }> = [
+  { prefix: "console/", section: "Console" },
+  { prefix: "subsystems/", section: "Subsystems" },
+  { prefix: "configuration/", section: "Configuration" },
+  { prefix: "reference/", section: "Reference" },
+];
+const RUST_CLI_SPECIAL_ORDER: Record<string, number> = {
+  "README": 0,
+  "getting-started": 1,
+  "architecture": 2,
+  "console/overview": 10,
+  "console/slash-commands": 11,
+  "console/dialogs": 12,
+  "console/theming": 13,
+  "subsystems/launch": 20,
+  "subsystems/boot": 21,
+  "subsystems/conductor": 22,
+  "subsystems/runtime-bridge": 23,
+  "subsystems/capability-deck": 24,
+  "subsystems/channels": 25,
+  "subsystems/sessions": 26,
+  "subsystems/window-budget": 27,
+  "subsystems/transcript-export": 28,
+  "subsystems/briefing": 29,
+  "subsystems/addons": 30,
+  "subsystems/insight": 31,
+  "configuration/settings": 40,
+  "configuration/auth": 41,
+  "configuration/models": 42,
+  "configuration/mcp": 43,
+  "reference/cli": 60,
+  "reference/crate-exports": 61,
+  "reference/parity": 62,
+  "reference/testing": 63,
+};
+
+function pickRustCliSection(slug: string): string {
+  for (const { prefix, section } of RUST_CLI_SECTION_MAP) {
+    if (slug.startsWith(prefix)) return section;
+  }
+  return "Start";
+}
+
+export async function getRustCliDocsManifest(): Promise<DocEntry[]> {
+  const paths = await readDocPaths("rust-cli");
+  const docs = await Promise.all(
+    paths.map(async (filePath) => {
+      const slug = slugFromFile(filePath, "rust-cli");
+      const title = await getTitleFromFile(filePath);
+      const section = pickRustCliSection(slug);
+      const order = RUST_CLI_SPECIAL_ORDER[slug] ?? 100;
+      return { slug, title, section, order };
+    }),
+  );
+
+  docs.sort((a, b) => sortDocs(a, b, RUST_CLI_SECTION_ORDER));
+  return docs;
+}
+
+export async function getRustCliDocBySlug(slugParts: string[]): Promise<DocContent | null> {
+  const slug = slugParts.join("/");
+  const filePath = path.join(CONTENT_DIR, "rust-cli", `${slug}.txt`);
+
+  try {
+    const markdown = await fs.readFile(filePath, "utf-8");
+    const { title, body } = stripTitle(markdown);
+    const { html, toc } = renderMarkdown(body);
+    const section = pickRustCliSection(slug);
+    return { slug, title, section, html, raw: body, toc };
+  } catch {
+    return null;
+  }
+}
+
+export async function getDefaultRustCliDocSlug(): Promise<string[]> {
+  const preferred = ["getting-started", "README"];
+  for (const slug of preferred) {
+    try {
+      await fs.access(path.join(CONTENT_DIR, "rust-cli", `${slug}.txt`));
+      return [slug];
+    } catch {
+      // continue
+    }
+  }
+  return ["README"];
+}

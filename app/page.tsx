@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header } from "./_components/Header";
 import { NpmStats } from "./_components/NpmStats";
+import { HeroInstall } from "./_components/HeroInstall";
 
 export default function Home() {
   const jsonLd = {
@@ -138,13 +139,16 @@ export default function Home() {
       <Header />
       <div className="flex items-center justify-center px-3 sm:px-4 pt-16 sm:pt-20 pb-8 sm:pb-10">
         <div className="max-w-5xl w-full">
-          {/* Hero Section */}
-          <div className="text-center mb-8 sm:mb-12 px-2">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[color:var(--ink)] mb-3 sm:mb-4">
-              Indusagi Documentation
-            </h1>
-            <p className="text-base sm:text-lg text-[color:var(--muted)]">
-              Choose the documentation you need
+          {/* Hero Section — install widget (both products × npm/pip/cargo) */}
+          <HeroInstall />
+
+          {/* Docs heading */}
+          <div className="text-center mb-6 sm:mb-8 px-2">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[color:var(--ink)] mb-2">
+              Documentation
+            </h2>
+            <p className="text-sm sm:text-base text-[color:var(--muted)]">
+              Choose the edition you need — TypeScript, Python, or Rust
             </p>
           </div>
 
@@ -222,6 +226,76 @@ export default function Home() {
                 </div>
               </div>
             </Link>
+
+            {/* IndusAGI Framework (Rust) Docs */}
+            <Link
+              href="/rust"
+              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
+                  RS
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
+                    IndusAGI (Rust)
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
+                    100% Rust Agent Framework
+                  </p>
+                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
+                    The native Cargo-workspace edition: LLM gateway, agent runtime, capabilities, swarm,
+                    and a Ratatui-style TUI — compiled to a single binary.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
+                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      Cargo
+                    </span>
+                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      Runtime
+                    </span>
+                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      LLM Gateway
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Coding Agent (Rust) Docs */}
+            <Link
+              href="/rust-cli"
+              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
+                  RS
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
+                    Coding Agent (Rust)
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
+                    Native Terminal Coding Agent
+                  </p>
+                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
+                    The Rust coding agent — interactive console, slash commands, branchable sessions,
+                    MCP, and a capability deck — built on the Rust framework.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
+                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      Console
+                    </span>
+                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      Slash Commands
+                    </span>
+                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
+                      Sessions
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
           </div>
 
           {/* NPM Stats Section */}
@@ -237,50 +311,6 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <NpmStats package="indusagi" label="SDK Package" />
               <NpmStats package="indusagi-coding-agent" label="CLI Package" />
-            </div>
-
-            {/* Python Packages (Python rebuilds) */}
-            <div className="text-center mb-6 sm:mb-8 mt-10 sm:mt-14">
-              <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--ink)] mb-2">
-                Python Packages
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted)]">
-                The Python rebuilds — install with pip
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              {[
-                { pkg: "indusagi", label: "Framework (Python)", href: "https://pypi.org/project/indusagi/", install: "pip install indusagi", from: "from-emerald-500", to: "to-green-600" },
-                { pkg: "induscode", label: "Coding Agent (Python)", href: "https://pypi.org/project/induscode/", install: "pip install induscode", from: "from-violet-500", to: "to-purple-600" },
-              ].map((p) => (
-                <a
-                  key={p.pkg}
-                  href={p.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="surface-strong rounded-xl sm:rounded-2xl p-4 sm:p-6 flex items-center justify-between gap-4 border border-transparent hover:border-[color:var(--accent)] transition-colors group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${p.from} ${p.to} flex items-center justify-center text-white`}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                        <line x1="12" y1="22.08" x2="12" y2="12" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] sm:text-xs text-[color:var(--muted)] uppercase tracking-wider">{p.label}</div>
-                      <div className="text-sm sm:text-base font-semibold text-[color:var(--ink)]">{p.pkg}</div>
-                      <code className="text-[10px] sm:text-xs text-[color:var(--accent)]">{p.install}</code>
-                    </div>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-[color:var(--muted)] group-hover:text-[color:var(--accent)] transition-colors">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                </a>
-              ))}
             </div>
           </div>
 

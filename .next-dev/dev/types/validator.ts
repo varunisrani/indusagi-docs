@@ -144,6 +144,42 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
   type __Unused = __Check
 }
 
+// Validate ../../../app/rust-cli/[...slug]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/rust-cli/[...slug]">> = Specific
+  const handler = {} as typeof import("../../../app/rust-cli/[...slug]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/rust-cli/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/rust-cli">> = Specific
+  const handler = {} as typeof import("../../../app/rust-cli/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/rust/[...slug]/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/rust/[...slug]">> = Specific
+  const handler = {} as typeof import("../../../app/rust/[...slug]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/rust/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/rust">> = Specific
+  const handler = {} as typeof import("../../../app/rust/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/sovereign-ai-indusagi/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/sovereign-ai-indusagi">> = Specific
