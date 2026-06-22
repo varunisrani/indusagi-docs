@@ -1,7 +1,41 @@
 import Link from "next/link";
 import { Header } from "./_components/Header";
-import { NpmStats } from "./_components/NpmStats";
 import { HeroInstall } from "./_components/HeroInstall";
+import { NpmStats } from "./_components/NpmStats";
+import { Faq } from "./_components/Faq";
+import { CopyCommand } from "./_components/CopyCommand";
+
+const LAYERS = [
+  { id: "L1", title: "LLM Gateway", body: "Unified multi-provider gateway — one interface for Claude, GPT, Gemini, Groq, Ollama and local models." },
+  { id: "L2", title: "Agent Runtime", body: "The model conversation loop — streaming, tool calls, and turn orchestration." },
+  { id: "L3", title: "Capabilities & Tools", body: "Built-in tool kernel, MCP interop, SaaS connectors, and a multi-agent swarm layer." },
+  { id: "L4", title: "Observability & Memory", body: "OTel-free tracing plus working-memory and project-context files." },
+  { id: "L5", title: "Product Shell & TUI", body: "The shipping CLI and a React-Ink / ratatui terminal UI you can fully customize." },
+];
+
+const EDITIONS = [
+  {
+    lang: "TypeScript",
+    cards: [
+      { kind: "FRAMEWORK", name: "indusagi", desc: "The framework — LLM gateway, agent loop, TUI widgets.", pages: "38 pages", href: "/docs" },
+      { kind: "CODING AGENT", name: "Coding Agent CLI", desc: "Terminal-first agent — extensions, skills, RPC & SDK modes.", pages: "30 pages", href: "/cli" },
+    ],
+  },
+  {
+    lang: "Python",
+    cards: [
+      { kind: "FRAMEWORK", name: "indusagi", desc: "The Python framework — facades over the full stack.", pages: "24 pages", href: "/python" },
+      { kind: "CODING AGENT", name: "induscode", desc: "Python coding agent — Textual console, branchable sessions.", pages: "27 pages", href: "/python-cli" },
+    ],
+  },
+  {
+    lang: "Rust",
+    cards: [
+      { kind: "FRAMEWORK", name: "indusagi", desc: "100% Rust, zero-SDK — compiled to a single binary.", pages: "20 pages", href: "/rust" },
+      { kind: "CODING AGENT", name: "induscode", desc: "Native ratatui REPL — slash commands, MCP, capability deck.", pages: "27 pages", href: "/rust-cli" },
+    ],
+  },
+];
 
 export default function Home() {
   const jsonLd = {
@@ -10,405 +44,232 @@ export default function Home() {
       {
         "@type": "SoftwareApplication",
         "@id": "https://www.indusagi.com/#sdk",
-        "name": "Indusagi SDK",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "All",
-        "downloadUrl": "https://www.npmjs.com/package/indusagi",
-        "offers": {
-          "@type": "Offer",
-          "price": "0.00",
-          "priceCurrency": "USD"
-        },
-        "description": "Fast, open-source TypeScript SDK and framework for building autonomous AI agents with full control over memory, tools, and streaming.",
-        "codeRepository": "https://github.com/varunisrani/indusagi",
-        "license": "https://opensource.org/licenses/MIT",
-        "author": {
-          "@type": "Organization",
-          "name": "Indusagi",
-          "url": "https://www.indusagi.com"
-        }
+        name: "Indusagi SDK",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "All",
+        downloadUrl: "https://www.npmjs.com/package/indusagi",
+        offers: { "@type": "Offer", price: "0.00", priceCurrency: "USD" },
+        description:
+          "Fast, open-source TypeScript SDK and framework for building autonomous AI agents with full control over memory, tools, and streaming.",
+        codeRepository: "https://github.com/varunisrani/indusagi",
+        license: "https://opensource.org/licenses/MIT",
+        author: { "@type": "Organization", name: "Indusagi", url: "https://www.indusagi.com" },
       },
       {
         "@type": "SoftwareApplication",
         "@id": "https://www.indusagi.com/#cli",
-        "name": "Indusagi Coding Agent CLI",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "All",
-        "downloadUrl": "https://www.npmjs.com/package/indusagi-coding-agent",
-        "offers": {
-          "@type": "Offer",
-          "price": "0.00",
-          "priceCurrency": "USD"
-        },
-        "description": "Powerful terminal-first AI assistant CLI with extensions, custom skills, Hooks, background agent threads, and RPC capabilities.",
-        "codeRepository": "https://github.com/varunisrani/indusagi-coding-agent",
-        "license": "https://opensource.org/licenses/MIT",
-        "author": {
-          "@type": "Organization",
-          "name": "Indusagi",
-          "url": "https://www.indusagi.com"
-        }
+        name: "Indusagi Coding Agent CLI",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "All",
+        downloadUrl: "https://www.npmjs.com/package/indusagi-coding-agent",
+        offers: { "@type": "Offer", price: "0.00", priceCurrency: "USD" },
+        description:
+          "Powerful terminal-first AI assistant CLI with extensions, custom skills, Hooks, background agent threads, and RPC capabilities.",
+        codeRepository: "https://github.com/varunisrani/indusagi-coding-agent",
+        license: "https://opensource.org/licenses/MIT",
+        author: { "@type": "Organization", name: "Indusagi", url: "https://www.indusagi.com" },
       },
-      {
-        "@type": "FAQPage",
-        "@id": "https://www.indusagi.com/#faq",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "What is Indusagi?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Indusagi is an open-source, fast TypeScript AI agent framework combined with a terminal-first Coding Agent CLI. It gives developers full control over memory systems, background execution loops, tool integration, and interactive terminal interfaces."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Do I have to pay to use Indusagi?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. Indusagi is fully free, open-source software distributed under the MIT license, meaning you can use it for both commercial and personal projects without any usage fees."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Do I need cloud-based LLM APIs to run Indusagi?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. While Indusagi supports cloud models like OpenAI, Anthropic Claude, and Groq, it also integrates natively with local LLM environments like Ollama and Llama.cpp for complete offline privacy."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How long does it take to set up and get started?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Initial setup takes less than two minutes. You can install the packages via npm or run the CLI immediately to start interacting with your workspace and creating custom AI agents."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "What makes Indusagi different from other AI coding agents?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Unlike rigid commercial coding agents, Indusagi is a highly customizable framework offering extensible hook listeners, terminal user interface (TUI) widgets, and smart session compaction to optimize context usage and reduce cost."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How does the CLI manage token usage and context windows?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Indusagi CLI integrates automated session compaction which compiles conversational history and branch updates into semantic summaries, keeping active context short and context costs down."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Do you support Model Context Protocol (MCP) servers?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Yes. Indusagi has built-in client support for MCP servers, allowing your custom agents to connect to any external tools, databases, or APIs adhering to the protocol."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Do I need to compile TypeScript files to build CLI extensions?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. The Coding Agent CLI loads custom extensions dynamically using jiti, allowing you to write, edit, and load TypeScript extension modules directly without a compilation step."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How do I customize the terminal UI (TUI) widgets?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "The Indusagi package provides fully modular React-style components for terminal screens. You can customize theme layouts, loading indicators, and input handlers using standard configurations in your agent codebase."
-            }
-          }
-        ]
-      }
-    ]
+    ],
   };
 
   return (
-    <main className="min-h-screen">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+    <main style={{ minHeight: "100vh" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Header />
-      <div className="flex items-center justify-center px-3 sm:px-4 pt-16 sm:pt-20 pb-8 sm:pb-10">
-        <div className="max-w-5xl w-full">
-          {/* Hero Section — install widget (both products × npm/pip/cargo) */}
-          <HeroInstall />
 
-          {/* Docs heading */}
-          <div className="text-center mb-6 sm:mb-8 px-2">
-            <h2 className="text-2xl sm:text-3xl font-bold text-[color:var(--ink)] mb-2">
+      <HeroInstall />
+
+      {/* Live npm stats */}
+      <section className="max-w-[1180px] mx-auto px-6 py-8">
+        <div className="text-center mb-9">
+          <div className="text-[color:var(--accent)] uppercase" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12, letterSpacing: ".12em" }}>
+            Live on npm
+          </div>
+          <h2 className="mt-2.5" style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: "clamp(28px,5vw,38px)", letterSpacing: "-0.02em" }}>
+            Real download stats
+          </h2>
+          <p className="max-w-[560px] mx-auto mt-3 text-[color:var(--muted)]" style={{ fontSize: 16, lineHeight: 1.6 }}>
+            Pulled live from the npm registry.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <NpmStats package="indusagi" label="SDK Package" />
+          <NpmStats package="indusagi-coding-agent" label="CLI Package" />
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="max-w-[1180px] mx-auto px-6 py-16">
+        <div className="text-center mb-9">
+          <div className="text-[color:var(--accent)] uppercase" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12, letterSpacing: ".12em" }}>
+            How it works
+          </div>
+          <h2 className="mt-2.5" style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: "clamp(28px,5vw,38px)", letterSpacing: "-0.02em" }}>
+            Five capability layers, one import
+          </h2>
+          <p className="max-w-[560px] mx-auto mt-3 text-[color:var(--muted)]" style={{ fontSize: 16, lineHeight: 1.6 }}>
+            Drop in the whole stack or reach for a single layer. The same architecture ships in TypeScript, Python, and Rust.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          {LAYERS.map((l) => (
+            <div
+              key={l.id}
+              className="flex items-center gap-[18px] rounded-xl border border-[color:var(--border)]"
+              style={{ padding: "18px 22px", background: "var(--surface)" }}
+            >
+              <span className="text-[color:var(--accent)] flex-none" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 13, width: 32 }}>
+                {l.id}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 600, fontSize: 17 }}>{l.title}</div>
+                <div className="text-[color:var(--muted)]" style={{ fontSize: 14, marginTop: 2, lineHeight: 1.5 }}>
+                  {l.body}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Pick your edition */}
+      <section className="border-t border-b border-[color:var(--border)]" style={{ background: "var(--surface)" }}>
+        <div className="max-w-[1180px] mx-auto px-6 py-16">
+          <div className="text-center mb-9">
+            <div className="text-[color:var(--accent)] uppercase" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12, letterSpacing: ".12em" }}>
               Documentation
+            </div>
+            <h2 className="mt-2.5" style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: "clamp(28px,5vw,38px)", letterSpacing: "-0.02em" }}>
+              Pick your edition
             </h2>
-            <p className="text-sm sm:text-base text-[color:var(--muted)]">
-              Choose the edition you need — TypeScript, Python, or Rust
+            <p className="max-w-[560px] mx-auto mt-3 text-[color:var(--muted)]" style={{ fontSize: 16, lineHeight: 1.6 }}>
+              Framework or coding agent, in the language your team already ships.
             </p>
           </div>
-
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 px-2 sm:px-0">
-            {/* Indusagi Package Docs */}
-            <Link
-              href="/docs"
-              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#fe6027] to-[#ff8a50] flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  PKG
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+            {EDITIONS.map((e) => (
+              <div key={e.lang} className="flex flex-col gap-3.5">
+                <div className="text-[color:var(--muted)] uppercase pl-1" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12, letterSpacing: ".1em" }}>
+                  {e.lang}
                 </div>
-                <div className="flex-1">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
-                    Indusagi Package
-                  </h2>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
-                    TypeScript SDK & Components
-                  </p>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
-                    All-in-one bundle: AI providers, agent loop, and TUI widgets.
-                    Build your own agent interfaces.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
-                    <span className="tag rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      AI Module
-                    </span>
-                    <span className="tag rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Agent Loop
-                    </span>
-                    <span className="tag rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      TUI
-                    </span>
-                  </div>
-                </div>
+                {e.cards.map((c) => (
+                  <Link
+                    key={c.href}
+                    href={c.href}
+                    className="block rounded-xl border border-[color:var(--border)] no-underline text-[color:var(--fg)] landing-card"
+                    style={{ background: "var(--bg)", padding: 20 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 600, fontSize: 17 }}>{c.name}</div>
+                      <span className="text-[color:var(--muted)]" style={{ fontSize: 12 }}>{c.pages}</span>
+                    </div>
+                    <div className="text-[color:var(--muted)]" style={{ fontSize: 14, marginTop: 8, lineHeight: 1.5 }}>
+                      {c.desc}
+                    </div>
+                    <div className="text-[color:var(--accent)]" style={{ fontSize: 13, marginTop: 16 }}>
+                      Open docs →
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </Link>
-
-            {/* Coding Agent CLI Docs */}
-            <Link
-              href="/cli"
-              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  CLI
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
-                    Coding Agent CLI
-                  </h2>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
-                    Terminal-First AI Assistant
-                  </p>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
-                    A powerful CLI coding agent with extensions, skills, hooks, and session management.
-                    Interactive, RPC, or SDK modes.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
-                    <span className="tag-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Extensions
-                    </span>
-                    <span className="tag-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Skills
-                    </span>
-                    <span className="tag-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      RPC Mode
-                    </span>
-                    <span className="tag-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      SDK
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* IndusAGI Framework (Rust) Docs */}
-            <Link
-              href="/rust"
-              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  RS
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
-                    IndusAGI (Rust)
-                  </h2>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
-                    100% Rust Agent Framework
-                  </p>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
-                    The native Cargo-workspace edition: LLM gateway, agent runtime, capabilities, swarm,
-                    and a Ratatui-style TUI — compiled to a single binary.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
-                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Cargo
-                    </span>
-                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Runtime
-                    </span>
-                    <span className="tag-rust rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      LLM Gateway
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* Coding Agent (Rust) Docs */}
-            <Link
-              href="/rust-cli"
-              className="group landing-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 hover:border-[color:var(--accent)] cursor-pointer"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shrink-0">
-                  RS
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent)] transition-colors">
-                    Coding Agent (Rust)
-                  </h2>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] mt-1 mb-2 sm:mb-3">
-                    Native Terminal Coding Agent
-                  </p>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted)] hidden sm:block">
-                    The Rust coding agent — interactive console, slash commands, branchable sessions,
-                    MCP, and a capability deck — built on the Rust framework.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
-                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Console
-                    </span>
-                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Slash Commands
-                    </span>
-                    <span className="tag-rust-cli rounded-full px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs">
-                      Sessions
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          </div>
-
-          {/* NPM Stats Section */}
-          <div className="mt-10 sm:mt-16 px-2 sm:px-0">
-            <div className="text-center mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--ink)] mb-2">
-                NPM Packages
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted)]">
-                Real-time download statistics from npm registry
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              <NpmStats package="indusagi" label="SDK Package" />
-              <NpmStats package="indusagi-coding-agent" label="CLI Package" />
-            </div>
-          </div>
-
-          {/* Frequently Asked Questions Section */}
-          <div className="mt-16 sm:mt-24 px-2 sm:px-0">
-            <div className="text-center mb-10">
-              <h2 className="text-2xl sm:text-3xl font-bold text-[color:var(--ink)] mb-2">
-                Frequently Asked Questions
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted)]">
-                Direct answers to common technical and general inquiries about Indusagi
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 sm:mb-12">
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  What is Indusagi?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  Indusagi is an open-source developer framework consisting of a TypeScript SDK and a terminal-first Coding Agent CLI. It is engineered to give developers granular programmatic control over autonomous AI agent loops, memory directories, and console UI rendering.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  Do I have to pay to use Indusagi?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  No. Both the TypeScript SDK and the CLI package are completely free to use under the MIT open-source license. You can deploy it for personal, institutional, or production-level commercial services without licensing fees.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  Do I need cloud-based LLM APIs to run Indusagi?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  No. While cloud APIs from Anthropic, OpenAI, and Groq are fully integrated, Indusagi natively supports local inference. You can configure it to execute completely offline using local providers such as Ollama and Llama.cpp.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  How long does it take to set up and get started?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  Initial environment initialization takes less than two minutes. You can install the CLI directly via npm, run the setup wizard to connect to your preferred model provider, and start working immediately.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  What makes Indusagi different from other AI coding agents?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  Unlike rigid, black-box AI platforms, Indusagi provides full code-level control. Developers can write custom hooks to intercept file operations, design dynamic console UI widgets, and configure granular token boundaries.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  How does the CLI manage token usage and context windows?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  The terminal CLI uses an automated session compaction algorithm. It periodically compiles extended conversation histories and active branch logs into semantic text summaries, preserving long-term project context while reducing API costs.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  Do you support Model Context Protocol (MCP) servers?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  Yes. The framework includes built-in client capabilities for MCP. This enables your custom agents to interact seamlessly with any third-party tools, local databases, or external microservices running the protocol.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  Do I need to compile TypeScript files to build CLI extensions?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  No. The Coding Agent CLI loads dynamic extension modules at runtime using the jiti compilation loader. You can write and execute TypeScript extension files immediately without manual pre-compilation.
-                </p>
-              </div>
-
-              <div className="landing-card rounded-2xl p-6 md:col-span-2">
-                <h3 className="text-base sm:text-lg font-semibold text-[color:var(--ink)] mb-2">
-                  How do I customize the terminal UI (TUI) widgets?
-                </h3>
-                <p className="text-xs sm:text-sm text-[color:var(--muted)] leading-relaxed">
-                  The SDK package includes a set of modular terminal widgets for dashboard design. You can programmatically set custom layouts, loading states, and text color schemes within your agent startup configuration.
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="max-w-[1180px] mx-auto px-6 py-16">
+        <div className="text-center mb-9">
+          <div className="text-[color:var(--accent)] uppercase" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12, letterSpacing: ".12em" }}>
+            Frequently asked
+          </div>
+          <h2 className="mt-2.5" style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: "clamp(28px,5vw,38px)", letterSpacing: "-0.02em" }}>
+            Questions, answered
+          </h2>
+        </div>
+        <Faq />
+      </section>
+
+      {/* CTA */}
+      <section className="max-w-[1180px] mx-auto px-6 pt-6 pb-[72px]">
+        <div className="rounded-[18px] border border-[color:var(--border)] text-center" style={{ background: "var(--accent-soft)", padding: "48px 32px" }}>
+          <h2 style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: "clamp(26px,4.5vw,34px)", letterSpacing: "-0.02em", margin: 0 }}>
+            Start building in one command
+          </h2>
+          <p className="max-w-[480px] mx-auto mt-3 text-[color:var(--muted)]" style={{ fontSize: 16 }}>
+            Free models included. No account, no credit card.
+          </p>
+          <CopyCommand command="npm install -g indusagi" />
+        </div>
+      </section>
+
+      <SiteFooter />
     </main>
+  );
+}
+
+function SiteFooter() {
+  const col = (title: string, items: { label: string; href?: string; external?: boolean }[]) => (
+    <div>
+      <div style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 600, fontSize: 14, marginBottom: 14 }}>{title}</div>
+      <div className="flex flex-col gap-2.5 text-[color:var(--muted)]" style={{ fontSize: 14 }}>
+        {items.map((it) =>
+          it.href ? (
+            it.external ? (
+              <a key={it.label} href={it.href} target="_blank" rel="noopener noreferrer" className="no-underline text-inherit">
+                {it.label}
+              </a>
+            ) : (
+              <Link key={it.label} href={it.href} className="no-underline text-inherit">
+                {it.label}
+              </Link>
+            )
+          ) : (
+            <span key={it.label}>{it.label}</span>
+          )
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <footer className="border-t border-[color:var(--border)]">
+      <div className="max-w-[1180px] mx-auto px-6 grid gap-8" style={{ padding: "48px 24px 24px", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
+        <div>
+          <div className="flex items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/indusagi-logo.png" alt="IndusAGI" className="site-logo h-7" />
+          </div>
+          <p className="mt-4 text-[color:var(--muted)]" style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 240 }}>
+            The open-source AI agent stack. TypeScript, Python &amp; Rust.
+          </p>
+        </div>
+        {col("Product", [
+          { label: "Framework", href: "/docs" },
+          { label: "Coding Agent", href: "/cli" },
+          { label: "Changelog" },
+          { label: "Roadmap" },
+        ])}
+        {col("Docs", [
+          { label: "TypeScript", href: "/docs" },
+          { label: "Python", href: "/python" },
+          { label: "Rust", href: "/rust" },
+          { label: "API reference", href: "/docs" },
+        ])}
+        {col("Community", [
+          { label: "GitHub", href: "https://github.com/varunisrani/indusagi", external: true },
+          { label: "Discord" },
+          { label: "npm", href: "https://www.npmjs.com/package/indusagi", external: true },
+          { label: "PyPI", href: "https://pypi.org/project/indusagi/", external: true },
+        ])}
+      </div>
+      <div
+        className="max-w-[1180px] mx-auto px-6 border-t border-[color:var(--border)] flex items-center justify-between gap-4 flex-wrap text-[color:var(--muted)]"
+        style={{ padding: "20px 24px 36px", fontSize: 13 }}
+      >
+        <span>© 2026 IndusAGI · MIT License</span>
+        <span>Privacy · Terms · Security</span>
+      </div>
+    </footer>
   );
 }

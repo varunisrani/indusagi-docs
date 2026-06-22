@@ -1,16 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
 });
+
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-body",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+// Applied before paint so the saved theme never flashes.
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('indusagi-theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.classList.remove('light','dark');document.documentElement.classList.add(t);document.documentElement.style.colorScheme=t;}catch(e){document.documentElement.classList.add('dark');}})();`;
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.indusagi.com'),
@@ -48,8 +59,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f0f0f",
-  colorScheme: "dark",
+  themeColor: "#0a0a0c",
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({
@@ -58,12 +69,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" style={{ backgroundColor: "#0f0f0f", colorScheme: "dark" }}>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
-        <meta name="color-scheme" content="dark" />
-        <style dangerouslySetInnerHTML={{ __html: `html, body { background: #0f0f0f !important; }` }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable} antialiased`} style={{ backgroundColor: "#0f0f0f" }}>
+      <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable} ${ibmPlexSans.variable} antialiased`}>
         {children}
       </body>
     </html>

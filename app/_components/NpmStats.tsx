@@ -37,7 +37,6 @@ export function NpmStats({ package: pkg, label }: NpmStatsProps) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -78,37 +77,27 @@ export function NpmStats({ package: pkg, label }: NpmStatsProps) {
     fetchStats();
   }, [fetchStats]);
 
-  const copyToClipboard = async () => {
-    const command = `npm install ${pkg}`;
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      const textArea = document.createElement("textarea");
-      textArea.value = command;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
   const formatNumber = (num: number): string => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
     if (num >= 1000) return (num / 1000).toFixed(1) + "K";
     return num.toString();
   };
 
+  const card =
+    "rounded-[14px] border border-[color:var(--border)] overflow-hidden";
+
   if (loading) {
     return (
-      <div className="surface-strong rounded-xl sm:rounded-2xl p-4 sm:p-6">
-        <div className="flex items-center justify-center py-8 sm:py-12">
-          <div className="flex flex-col items-center gap-2 sm:gap-3">
-            <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-2 border-[color:var(--accent)] border-t-transparent"></div>
-            <span className="text-xs sm:text-sm text-[color:var(--muted)]">Loading stats...</span>
+      <div className={card} style={{ background: "var(--surface)" }}>
+        <div className="flex items-center justify-center" style={{ padding: "56px 24px" }}>
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="animate-spin rounded-full"
+              style={{ width: 26, height: 26, border: "2px solid var(--accent)", borderTopColor: "transparent" }}
+            />
+            <span className="text-[color:var(--muted)]" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 12 }}>
+              Loading stats…
+            </span>
           </div>
         </div>
       </div>
@@ -117,14 +106,10 @@ export function NpmStats({ package: pkg, label }: NpmStatsProps) {
 
   if (error) {
     return (
-      <div className="surface-strong rounded-xl sm:rounded-2xl p-4 sm:p-6">
-        <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
-          <AlertIcon />
-          <div className="text-xs sm:text-sm text-red-500">{error}</div>
-          <button
-            onClick={fetchStats}
-            className="mt-3 text-xs text-[color:var(--accent)] hover:underline"
-          >
+      <div className={card} style={{ background: "var(--surface)" }}>
+        <div className="flex flex-col items-center justify-center text-center" style={{ padding: "40px 24px" }}>
+          <div className="text-[color:var(--muted)]" style={{ fontSize: 14 }}>Couldn’t load stats</div>
+          <button onClick={fetchStats} className="text-[color:var(--accent)]" style={{ marginTop: 12, fontSize: 13, background: "transparent", border: "none", cursor: "pointer" }}>
             Try again
           </button>
         </div>
@@ -134,123 +119,66 @@ export function NpmStats({ package: pkg, label }: NpmStatsProps) {
 
   if (!stats) return null;
 
+  const statCell = (value: string, name: string) => (
+    <div className="text-center" style={{ background: "var(--surface)", padding: "18px 8px" }}>
+      <div style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 700, fontSize: 24, letterSpacing: "-0.015em", color: "var(--fg)" }}>
+        {value}
+      </div>
+      <div className="text-[color:var(--muted)]" style={{ fontSize: 12, marginTop: 4 }}>
+        {name}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="surface-strong rounded-xl sm:rounded-2xl overflow-hidden">
+    <div className={card} style={{ background: "var(--surface)" }}>
       {/* Header */}
-      <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-[color:var(--border)]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-[#fe6027] to-[#ff8a50] flex items-center justify-center">
-              <NpmIcon />
+      <div className="flex items-center border-b border-[color:var(--border)]" style={{ padding: "14px 18px" }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="flex items-center justify-center shrink-0 rounded-lg"
+            style={{ width: 36, height: 36, background: "var(--accent-soft)", color: "var(--accent)" }}
+          >
+            <NpmIcon />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[color:var(--muted)] uppercase" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 10, letterSpacing: ".1em" }}>
+              {label || "Package"}
             </div>
-            <div>
-              <div className="text-[10px] sm:text-xs text-[color:var(--muted)] uppercase tracking-wider">
-                {label || "Package"}
-              </div>
-              <div className="text-sm sm:text-base font-semibold text-[color:var(--ink)]">{pkg}</div>
+            <div className="truncate" style={{ fontFamily: "var(--font-sans), sans-serif", fontWeight: 600, fontSize: 15, color: "var(--fg)" }}>
+              {pkg}
             </div>
           </div>
-          <a
-            href={`https://www.npmjs.com/package/${pkg}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[color:var(--muted)] hover:text-[color:var(--accent)] transition-colors p-1"
-          >
-            <ExternalLinkIcon />
-          </a>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="p-4 sm:p-6">
-        {/* Total Downloads */}
-        <div className="text-center mb-4 sm:mb-6">
-          <div className="text-3xl sm:text-4xl font-bold text-[color:var(--accent)] mb-0.5 sm:mb-1">
-            {formatNumber(stats.yearly)}
-          </div>
-          <div className="text-xs sm:text-sm text-[color:var(--muted)]">Total Downloads (Last Year)</div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6">
-          <div className="bg-[rgba(255,122,69,0.12)] rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
-            <div className="text-xl sm:text-2xl font-bold text-[color:var(--ink)]">{formatNumber(stats.monthly)}</div>
-            <div className="text-[10px] sm:text-xs text-[color:var(--muted)] mt-0.5 sm:mt-1">Monthly</div>
-          </div>
-          <div className="bg-[rgba(34,211,238,0.1)] rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
-            <div className="text-xl sm:text-2xl font-bold text-[color:var(--ink)]">{formatNumber(stats.weekly)}</div>
-            <div className="text-[10px] sm:text-xs text-[color:var(--muted)] mt-0.5 sm:mt-1">Weekly</div>
-          </div>
-        </div>
-
-        {/* Install Button */}
-        <button
-          onClick={copyToClipboard}
-          className={`w-full flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all duration-200 ${
-            copied
-              ? "bg-green-500 text-white"
-              : "bg-[color:var(--accent)] text-white hover:opacity-90"
-          }`}
+      {/* Body — download counts as a flat stat grid (year / month / week) */}
+      <div style={{ padding: 18 }}>
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: "repeat(3,1fr)",
+            gap: 1,
+            background: "var(--border)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            overflow: "hidden",
+          }}
         >
-          {copied ? (
-            <>
-              <CheckIcon />
-              Copied!
-            </>
-          ) : (
-            <>
-              <CopyIcon />
-              <code className="text-[10px] sm:text-xs">npm install {pkg}</code>
-            </>
-          )}
-        </button>
+          {statCell(formatNumber(stats.yearly), "per year")}
+          {statCell(formatNumber(stats.monthly), "monthly")}
+          {statCell(formatNumber(stats.weekly), "weekly")}
+        </div>
       </div>
     </div>
   );
 }
 
-// Icons
 function NpmIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white sm:w-5 sm:h-5">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
       <path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0H1.763zM4.24 4.5h15.52v15.52H4.24V4.5zm3.12 3.12v9.28h3.12v-6.16h3.04v6.16h3.12V7.62H7.36z" />
     </svg>
   );
 }
 
-function CopyIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-3.5 sm:h-3.5">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="sm:w-3.5 sm:h-3.5">
-      <polyline points="20,6 9,17 4,12" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4">
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <polyline points="15,3 21,3 21,9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mb-2">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}

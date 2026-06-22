@@ -1,175 +1,173 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
+import Link from "next/link";
 
-type Method = {
-  id: string;
-  label: string;
-  live?: boolean;
-  cmd: string;
+const COMMANDS: Record<string, Record<string, string>> = {
+  indusagi: {
+    npm: "npm install -g indusagi",
+    pip: "pip install indusagi",
+    cargo: "cargo install indusagi",
+  },
+  induscode: {
+    npm: "npm install -g indusagi-coding-agent",
+    pip: "pip install induscode",
+    cargo: "cargo install induscode",
+  },
 };
 
-type Product = {
-  id: string;
-  name: string;
-  tagline: string;
-  accent: string; // active tab / underline color
-  methods: Method[];
-};
+const PRODUCTS = [
+  { id: "indusagi", label: "indusagi", sub: "Framework" },
+  { id: "induscode", label: "induscode", sub: "Coding agent" },
+];
 
-// Install matrix: both products × the three ecosystems (npm / python / rust).
-const PRODUCTS: Product[] = [
-  {
-    id: "indusagi",
-    name: "indusagi",
-    tagline: "Agent framework",
-    accent: "#ff7a45",
-    methods: [
-      { id: "npm", label: "npm", live: true, cmd: "npm install -g indusagi" },
-      { id: "pip", label: "pip", live: true, cmd: "pip install indusagi" },
-      { id: "cargo", label: "cargo", live: true, cmd: "cargo install indusagi" },
-    ],
-  },
-  {
-    id: "induscode",
-    name: "induscode",
-    tagline: "Coding agent",
-    accent: "#22d3ee",
-    methods: [
-      { id: "npm", label: "npm", live: true, cmd: "npm install -g indusagi-coding-agent" },
-      { id: "pip", label: "pip", live: true, cmd: "pip install induscode" },
-      { id: "cargo", label: "cargo", live: true, cmd: "cargo install induscode" },
-    ],
-  },
+const TABS = [
+  { id: "npm", label: "npm (node)" },
+  { id: "pip", label: "pip (python)" },
+  { id: "cargo", label: "cargo (rust)" },
 ];
 
 export function HeroInstall() {
-  const [productId, setProductId] = useState(PRODUCTS[0].id);
-  const [methodId, setMethodId] = useState("npm");
+  const [product, setProduct] = useState("indusagi");
+  const [tab, setTab] = useState("npm");
   const [copied, setCopied] = useState(false);
 
-  const product = PRODUCTS.find((p) => p.id === productId) ?? PRODUCTS[0];
-  const method = product.methods.find((m) => m.id === methodId) ?? product.methods[0];
+  const cmd = COMMANDS[product][tab];
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(method.cmd);
+      await navigator.clipboard.writeText(cmd);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // clipboard unavailable — no-op
+      /* clipboard unavailable */
     }
   };
 
+  const pill = (active: boolean): CSSProperties => ({
+    padding: "9px 18px",
+    borderRadius: 999,
+    border: "none",
+    background: active ? "var(--accent-soft)" : "transparent",
+    color: active ? "var(--accent)" : "var(--muted)",
+    fontFamily: "var(--font-sans), sans-serif",
+    fontWeight: 600,
+    fontSize: 15,
+    cursor: "pointer",
+  });
+
+  const tabStyle = (active: boolean): CSSProperties => ({
+    padding: "8px 16px",
+    borderRadius: 8,
+    border: "none",
+    background: active ? "var(--accent-soft)" : "transparent",
+    color: active ? "var(--accent)" : "var(--muted)",
+    fontFamily: "var(--font-mono), monospace",
+    fontSize: 13,
+    cursor: "pointer",
+  });
+
   return (
-    <div className="text-center mb-10 sm:mb-14 px-2">
-      <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight text-[color:var(--ink)] mb-4 sm:mb-5">
-        The open-source AI agent stack
+    <section className="max-w-[1180px] mx-auto px-6 pt-[72px] pb-12 text-center">
+      <div
+        className="inline-flex items-center gap-2 px-[13px] py-1.5 rounded-full text-xs text-[color:var(--muted)] border border-[color:var(--border)]"
+        style={{ fontFamily: "var(--font-mono), monospace" }}
+      >
+        <span className="w-[7px] h-[7px] rounded-full inline-block" style={{ background: "var(--accent)" }} />
+        OPEN SOURCE · MIT LICENSED
+      </div>
+
+      <h1
+        className="mt-6 mb-0"
+        style={{
+          fontFamily: "var(--font-sans), sans-serif",
+          fontWeight: 700,
+          fontSize: "clamp(38px,8vw,66px)",
+          lineHeight: 1.02,
+          letterSpacing: "-0.025em",
+        }}
+      >
+        The open-source
+        <br />
+        AI agent stack
       </h1>
-      <p className="mx-auto max-w-2xl text-base sm:text-lg text-[color:var(--muted)] leading-relaxed">
-        A terminal-first coding agent and the framework underneath it. Install from{" "}
-        <span className="text-[color:var(--ink)]">npm</span>,{" "}
-        <span className="text-[color:var(--ink)]">pip</span>, or{" "}
-        <span className="text-[color:var(--ink)]">cargo</span> — free models included, or connect any
-        provider including Claude, GPT, Gemini and more.
+
+      <p className="max-w-[620px] mx-auto mt-[22px] text-[color:var(--muted)]" style={{ fontSize: "clamp(16px,2.4vw,18px)", lineHeight: 1.6 }}>
+        A terminal-first coding agent and the framework underneath it. Install from npm, pip, or cargo — free
+        models included, or bring Claude, GPT, Gemini and your own.
       </p>
 
-      {/* Product selector */}
-      <div className="mt-7 sm:mt-9 inline-flex rounded-full border border-[color:var(--border)] bg-[rgba(20,20,20,0.6)] p-1">
-        {PRODUCTS.map((p) => {
-          const active = p.id === productId;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setProductId(p.id);
-                setCopied(false);
-              }}
-              className={`relative rounded-full px-4 sm:px-5 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? "bg-[rgba(255,255,255,0.08)] text-[color:var(--ink)]"
-                  : "text-[color:var(--muted)] hover:text-[color:var(--ink)]"
-              }`}
-            >
-              {p.name}
-              <span className="ml-2 hidden sm:inline text-[11px] text-[color:var(--muted)]">{p.tagline}</span>
-            </button>
-          );
-        })}
+      {/* Product toggle */}
+      <div
+        className="inline-flex gap-1 mt-[34px] p-1 rounded-full border border-[color:var(--border)]"
+        style={{ background: "var(--surface)" }}
+      >
+        {PRODUCTS.map((p) => (
+          <button key={p.id} onClick={() => setProduct(p.id)} style={pill(product === p.id)}>
+            {p.label}
+            <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 7 }}>{p.sub}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Install card */}
-      <div className="mt-5 mx-auto max-w-2xl text-left">
-        <div className="surface-strong rounded-2xl border border-[color:var(--border)] overflow-hidden">
-          {/* Method tabs */}
-          <div className="flex items-center gap-1 sm:gap-2 border-b border-[color:var(--border)] px-2 sm:px-3">
-            {product.methods.map((m) => {
-              const active = m.id === methodId;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => {
-                    setMethodId(m.id);
-                    setCopied(false);
-                  }}
-                  className="relative flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-mono transition-colors"
-                  style={{ color: active ? "var(--ink)" : "var(--muted)" }}
-                >
-                  {m.label}
-                  {m.live && (
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
-                      style={{ background: "rgba(255,122,69,0.16)", color: product.accent }}
-                    >
-                      live
-                    </span>
-                  )}
-                  {active && (
-                    <span
-                      className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
-                      style={{ background: product.accent }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Command row */}
-          <div className="flex items-center gap-3 px-4 sm:px-5 py-4">
-            <code className="min-w-0 flex-1 font-mono text-[13px] sm:text-sm text-[color:var(--ink)] break-all">
-              <span className="select-none text-[color:var(--muted)]">$ </span>
-              {method.cmd}
-            </code>
-            <button
-              type="button"
-              onClick={copy}
-              aria-label="Copy install command"
-              className="shrink-0 rounded-lg border border-[color:var(--border)] p-2 text-[color:var(--muted)] hover:text-[color:var(--ink)] hover:border-[color:var(--accent)] transition-colors"
-            >
-              {copied ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={product.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
+      {/* Install box */}
+      <div
+        className="max-w-[660px] mx-auto mt-[18px] rounded-[14px] border border-[color:var(--border)] overflow-hidden text-left"
+        style={{ background: "var(--surface)" }}
+      >
+        <div className="flex flex-wrap gap-1 border-b border-[color:var(--border)]" style={{ padding: "10px 12px" }}>
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={tabStyle(tab === t.id)}>
+              {t.label}
             </button>
-          </div>
+          ))}
         </div>
-        <p className="mt-2.5 text-center text-xs text-[color:var(--muted)]">
-          {method.id === "cargo"
-            ? "Installs the latest crates.io release as a native single binary. `cargo binstall` and prebuilt installers (shell · Homebrew) ship via GitHub Releases."
-            : product.id === "indusagi"
-              ? "Requires Node 20+ (npm) or Python 3.11+ (pip). Set a provider API key, then import or run it."
-              : "Requires Node 20+ (npm) or Python 3.11+ (pip). Set a provider API key, then launch the console."}
-        </p>
+        <div
+          className="flex items-center justify-between gap-4 flex-wrap"
+          style={{ padding: "20px 22px", fontFamily: "var(--font-mono), monospace", fontSize: 15 }}
+        >
+          <span style={{ wordBreak: "break-all" }}>
+            <span style={{ color: "var(--accent)", marginRight: 8 }}>$</span>
+            {cmd}
+          </span>
+          <button
+            onClick={copy}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border)] cursor-pointer whitespace-nowrap"
+            style={{
+              padding: "7px 11px",
+              background: "transparent",
+              color: "var(--muted)",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 12,
+            }}
+          >
+            {copied ? "✓ Copied" : "⧉ Copy"}
+          </button>
+        </div>
       </div>
-    </div>
+
+      <p className="mt-3.5 text-[color:var(--muted)]" style={{ fontFamily: "var(--font-mono), monospace", fontSize: 13 }}>
+        Requires Node 20+ (npm), Python 3.11+ (pip), or Rust 1.96+ (cargo). Set a provider key, then run.
+      </p>
+
+      <div className="flex gap-3 justify-center flex-wrap mt-[26px]">
+        <Link
+          href="/docs"
+          className="rounded-[10px] font-semibold text-white no-underline"
+          style={{ padding: "13px 22px", background: "var(--accent)", fontSize: 15 }}
+        >
+          Read the docs
+        </Link>
+        <a
+          href="https://github.com/varunisrani/indusagi"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-[10px] font-semibold no-underline border border-[color:var(--border)] text-[color:var(--fg)]"
+          style={{ padding: "13px 22px", fontSize: 15 }}
+        >
+          ★ Star on GitHub
+        </a>
+      </div>
+    </section>
   );
 }
