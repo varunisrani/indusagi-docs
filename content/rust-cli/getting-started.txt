@@ -78,6 +78,7 @@ outside `Cargo.toml`).
 |---|---|---|
 | Rust user (crates.io) | `cargo install induscode` | installs `indusr` + `indusagir` |
 | Rust user, prebuilt | `cargo binstall induscode` | downloads a release binary |
+| Embedding it as a library | `cargo add induscode` | adds the dependency (surface `induscode::<module>`) |
 | npm user (preserves the habit) | `npm i -g indusagi-coding-agent` | the published package wrapper |
 | macOS / Linux, scripted | `curl --proto '=https' -sSf https://…/install.sh \| sh` | scripted install |
 | Windows | `irm https://…/install.ps1 \| iex` | scripted install |

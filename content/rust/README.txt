@@ -4,13 +4,14 @@
 > zero-SDK rebuild of the TypeScript ground truth, compiled to a single static binary at full
 > feature parity. The whole stack — LLM gateway, pure-FSM agent runtime, tool kernel, MCP
 > interop, ratatui UI, SaaS connectors, multi-agent swarm, and the CLI shell — lives inside
-> one `indusagi` library crate (npm-style "one package, many modules"), driven by the
-> `indusagi-cli` binary, with `indusagi-testkit` providing the shared dev fixtures.
+> one published `indusagi` crate (npm-style "one package, many modules") that exposes both the
+> library and the `indusagi` binary, with `indusagi-testkit` providing the shared dev fixtures.
 
 ## Table of Contents
 
 - [What it is](#what-it-is)
-- [The three crates](#the-three-crates)
+- [The crates](#the-crates)
+- [Install](#install)
 - [Build and use](#build-and-use)
 - [The module map](#the-module-map)
 - [Subsystems](#subsystems)
@@ -44,27 +45,26 @@ The headline reason to reach for the Rust edition is footprint and latency. Meas
 the Node build, cold start is ~86× faster, peak RSS is ~30× smaller, and the install footprint
 is ~27× smaller — see [Performance](/rust/performance) for the methodology and numbers.
 
-## The three crates
+## The crates
 
 Unlike the original plan's per-subsystem crate split, the thirteen former `indusagi-*` library
-crates have been **merged into the single `indusagi` library crate as modules** (npm-style one
-package). The workspace therefore ships exactly three published-or-shipped crates plus the
-`xtask` build tool:
+crates have been **merged into the single `indusagi` crate as modules** (npm-style one
+package). The same `indusagi` crate also carries the CLI binary, so it ships **both** a library
+target and a binary target. The workspace therefore has two crates plus the `xtask` build tool:
 
 | Crate | Kind | Publishes | Holds |
 |-------|------|-----------|-------|
-| `indusagi` | library (`[lib] name = "indusagi"`, `src/lib.rs`) | yes (crates.io) | The whole framework: every subsystem is a `mod` here, re-exported through the umbrella barrel. |
-| `indusagi-cli` | binary (`[[bin]] name = "indusagi"`, `src/main.rs`) | no (`publish = false`; ships as a GitHub Release / binstall artifact) | `main()` and the `ExitCode`. A thin shim: collect argv, drive `indusagi::shell_app::run` on a Tokio runtime, return its exit code. |
+| `indusagi` | library **and** binary (`[lib] name = "indusagi"`, `src/lib.rs`; `[[bin]] name = "indusagi"`, `src/main.rs`) | yes (crates.io) | The whole framework (every subsystem is a `mod` here, re-exported through the umbrella barrel) **and** the `indusagi` CLI binary. `cargo add indusagi` pulls in the library; `cargo install indusagi` installs the binary. |
 | `indusagi-testkit` | dev library | no (`publish = false`) | The four shared test seams: `ScriptedModel`, the `TranscriptServer` wiremock helper, the ratatui `TestBackend` render harness, and the golden-corpus `fixture` loader. |
 
-The `Cargo.toml` workspace members are `crates/indusagi`, `crates/indusagi-cli`,
-`crates/indusagi-testkit`, and `xtask`, with `default-members = ["crates/indusagi-cli"]`. The
+The `Cargo.toml` workspace members are `crates/indusagi`,
+`crates/indusagi-testkit`, and `xtask`, with `default-members = ["crates/indusagi"]`. The
 absorbed subsystem source directories remain on disk but are no longer workspace members, so
 they are not re-discovered.
 
 ### The binary is a thin shim
 
-`indusagi-cli/src/main.rs` does exactly three things, per the entry-point rule: collect the OS
+The `indusagi` crate's `src/main.rs` does exactly three things, per the entry-point rule: collect the OS
 argv (dropping `argv[0]`, lossy-converted so non-UTF-8 args become U+FFFD rather than aborting
 the launch), drive the async entry point, and return its `ExitCode` to the OS. `main` returns
 `ExitCode` and never calls `process::exit`, so every destructor runs on the way out — the TUI
@@ -108,13 +108,25 @@ merged crate's `shell_app` module, reachable through `pub async fn run(argv: Vec
 `indusagi` depends on `indusagi-testkit` only as a `dev-dependency`, and `indusagi-testkit`
 depends back on `indusagi`, so the resulting cycle is dev-only (cargo permits it).
 
+## Install
+
+`indusagi` is one published crate carrying both a `[lib]` and a `[[bin]] name = "indusagi"`, so
+the same crate name installs the CLI and adds the library:
+
+```bash
+cargo install indusagi    # the CLI — puts the `indusagi` binary on your PATH
+cargo add indusagi        # the library — depend on the framework from your own crate
+```
+
 ## Build and use
+
+From a checkout of the workspace:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"   # rustc/cargo 1.96.0, edition 2024
 cargo build --workspace
 cargo test  --workspace
-cargo run -p indusagi-cli              # the `indusagi` binary
+cargo run              # the `indusagi` binary
 ```
 
 Set the provider key for the model you intend to run, then invoke the binary. The runner is
@@ -279,7 +291,7 @@ truth:
 |---------|------|--------------|----------------|
 | TypeScript (original / ground truth) | [/docs](/docs) | npm `indusagi` v0.13.1 | The `src/index.ts` barrel; subpath exports `indusagi/{ai,agent,mcp,memory}`. |
 | Python | [/python](/python) | `pip install indusagi` | Lazy per-layer subpackages (`indusagi.runtime`, `indusagi.llmgateway`, …); `snake_case`, `async`/`await`. |
-| **Rust (this edition)** | [/rust](/rust) | crates.io `indusagi` v0.1.0 + the `indusagi` binary | The `src/lib.rs` umbrella barrel; one crate, many modules; `async` over Tokio. |
+| **Rust (this edition)** | [/rust](/rust) | crates.io `indusagi` v0.1.0 — `cargo install indusagi` (binary) / `cargo add indusagi` (library) | The `src/lib.rs` umbrella barrel; one crate, many modules; `async` over Tokio. |
 
 The Rust edition tracks the TypeScript ground truth module-for-module and is declared at **full
 parity (26/26)** — the same subsystems, the same model catalog, the same v3 JSONL session

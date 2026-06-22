@@ -1,9 +1,10 @@
 # Getting Started
 
-> `indusagi` is the 100% Rust rebuild of the terminal-first AI coding-agent framework — a Cargo workspace that compiles to a single static binary. The library crate is `indusagi`; the `indusagi-cli` binary crate owns `main()` and ships the `indusagi` executable. Build it with `cargo build`, run it with `cargo run -p indusagi-cli`, set your provider API key in the environment (or sign in with `indusagi auth login`), and a bare attended launch opens the interactive REPL/TUI.
+> `indusagi` is the 100% Rust rebuild of the terminal-first AI coding-agent framework — a Cargo workspace that compiles to a single static binary. One published crate, `indusagi`, carries both the library (`[lib]`) and the `indusagi` CLI binary (`[[bin]]`). Install the CLI with `cargo install indusagi`, add the library with `cargo add indusagi`, or build from a checkout with `cargo build` / `cargo run`. Set your provider API key in the environment (or sign in with `indusagi auth login`), and a bare attended launch opens the interactive REPL/TUI.
 
 ## Table of Contents
 
+- [Install](#install)
 - [The crate layout](#the-crate-layout)
 - [Toolchain](#toolchain)
 - [Build and run](#build-and-run)
@@ -18,18 +19,28 @@
 - [Embedding the launcher](#embedding-the-launcher)
 - [Where to next](#where-to-next)
 
+## Install
+
+`indusagi` is published to crates.io as one crate that carries both the library and the `indusagi` binary, so the same name installs the CLI and adds the library:
+
+```bash
+cargo install indusagi    # the CLI — puts the `indusagi` binary on your PATH
+cargo add indusagi        # the library — depend on the framework from your own crate
+```
+
+The rest of this page is the build-from-source and embedding walkthrough.
+
 ## The crate layout
 
-`indusagi-rust/` is a virtual Cargo workspace (`resolver = "3"`, edition 2024). The 13 former subsystem library crates are merged into one library crate, `indusagi`, as modules — npm-style "one package". The workspace `members` are listed explicitly:
+`indusagi-rust/` is a virtual Cargo workspace (`resolver = "3"`, edition 2024). The 13 former subsystem library crates are merged into one crate, `indusagi`, as modules — npm-style "one package" — and that crate carries both the `[lib]` and the `[[bin]]`. The workspace `members` are listed explicitly:
 
 | Crate | Role | Bin |
 |-------|------|-----|
-| `crates/indusagi` | The umbrella library crate (`[lib] name = "indusagi"`, `src/lib.rs`). Every subsystem lives here as a module (`core`, `llmgateway`, `runtime`, `capabilities`, `interop`, `tui`, `shell_app`, …). | — |
-| `crates/indusagi-cli` | The binary crate. `publish = false`. Owns `main()` and the only `[[bin]]` in the tree. | `indusagi` |
+| `crates/indusagi` | The umbrella crate (`[lib] name = "indusagi"`, `src/lib.rs`) holding every subsystem as a module (`core`, `llmgateway`, `runtime`, `capabilities`, `interop`, `tui`, `shell_app`, …), plus the only `[[bin]]` in the tree (`name = "indusagi"`, `src/main.rs`, a thin `main()` over `indusagi::shell_app::run`). Published to crates.io. | `indusagi` |
 | `crates/indusagi-testkit` | Dev-only test fixtures (`ScriptedModel`, wiremock helpers, render harness). `publish = false`. | — |
 | `xtask` | Build / lineage / release tooling (replaces `build.mjs`). | `xtask` |
 
-`default-members = ["crates/indusagi-cli"]`, so a bare `cargo run` drives the binary. The workspace `version` is single-sourced as `0.1.0` (continuing the npm `0.13.x` line); every crate inherits it via `version.workspace = true`, and the runtime version string is the compile-time `CARGO_PKG_VERSION` — there is no filesystem walk and no `"0.0.0"` fallback.
+`default-members = ["crates/indusagi"]`, so a bare `cargo run` drives the binary. The workspace `version` is single-sourced as `0.1.0` (continuing the npm `0.13.x` line); every crate inherits it via `version.workspace = true`, and the runtime version string is the compile-time `CARGO_PKG_VERSION` — there is no filesystem walk and no `"0.0.0"` fallback.
 
 The shell application — argv parsing through to a running agent — is the `shell_app` module of the `indusagi` crate (the port of the TypeScript `shell-app/` subsystem). See [Shell App](/rust/subsystems/shell-app) for its internals; this page is the build-and-run walkthrough.
 
@@ -62,19 +73,19 @@ cargo build --workspace
 cargo test --workspace
 
 # Run the binary directly through cargo (the `indusagi` executable).
-cargo run -p indusagi-cli
+cargo run
 
 # Pass flags after `--` so cargo forwards them to the binary, not to cargo.
-cargo run -p indusagi-cli -- --help
-cargo run -p indusagi-cli -- --version
-cargo run -p indusagi-cli -- -m claude-sonnet-4 -p "summarize the Cargo.toml in this repo"
+cargo run -- --help
+cargo run -- --version
+cargo run -- -m claude-sonnet-4 -p "summarize the Cargo.toml in this repo"
 ```
 
 For a shippable binary, build in release. The `release` profile is tuned for a latency-sensitive agent (`opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `strip = true`, `panic = "abort"`); a `dist` profile inherits it with `lto = "fat"` for release artifacts:
 
 ```bash
-cargo build --release -p indusagi-cli        # target/release/indusagi
-cargo build --profile dist -p indusagi-cli   # target/dist/indusagi (max optimization)
+cargo build --release -p indusagi        # target/release/indusagi
+cargo build --profile dist -p indusagi   # target/dist/indusagi (max optimization)
 
 # Then run the built binary directly:
 ./target/release/indusagi --version          # prints: indusagi 0.1.0
@@ -93,22 +104,22 @@ The Cargo feature taxonomy lives on the **`indusagi` library crate** (`crates/in
 | `composio` | The Composio SaaS connector adapter (`connectors_saas` — a pure code gate). |
 | `full` | `mcp + tui + composio + swarm`. |
 
-The `indusagi-cli` binary crate depends on `indusagi` with its **default features always on** (it does not re-export `rustls`/`mcp`/`tui`/`swarm`/`composio`/`full`), so a trimmed build is driven against the library crate, not `-p indusagi-cli`:
+A normal `cargo install indusagi` or `cargo build` keeps the **default features on** (`rustls`/`mcp`/`tui`), so the installed binary carries the full historical surface. A trimmed build drops them:
 
 ```bash
-# Lean line-oriented build of the library (no live TUI, no MCP):
+# Lean line-oriented build (no live TUI, no MCP):
 cargo build -p indusagi --no-default-features --features rustls
 ```
 
-The `indusagi-cli` crate has exactly one feature of its own: an off-by-default `mimalloc` (`dep:mimalloc`) that swaps in the mimalloc global allocator. The default tree stays allocator-neutral:
+The crate also has an off-by-default `mimalloc` feature (`dep:mimalloc`) that swaps in the mimalloc global allocator. The default tree stays allocator-neutral:
 
 ```bash
-cargo build -p indusagi-cli --features mimalloc   # the only indusagi-cli feature
+cargo build -p indusagi --features mimalloc   # opt into the mimalloc allocator
 ```
 
 ## The indusagi binary
 
-The `[[bin]]` is named `indusagi` (`crates/indusagi-cli/Cargo.toml`):
+The `[[bin]]` is named `indusagi`, defined in the `indusagi` crate (`crates/indusagi/Cargo.toml`):
 
 ```toml
 [[bin]]
@@ -160,9 +171,9 @@ The command-line vocabulary is the single source of truth `indusagi::shell_app::
 The parser understands long flags (`--name`, `--name=value`, `--name value`), short flags (`-x`, `-x=value`, `-xvalue`), clustered short booleans (`-ip` → `-i -p`), a value-taking short that ends a cluster (`-ipm gpt` → `-i -p -m gpt`), a bare `--` terminator (everything after is positional), and repeatable flags (`--mcp` accumulates a list). Positionals join into a single free-text prompt. A malformed invocation returns an `InvocationError` whose `Display` is byte-exact to the TS — e.g. `unrecognised flag "--bogus".`, `flag "--model" expects a value.`, `flag "--print" takes no value but got "=1".` — written to stderr, exit `2`.
 
 ```bash
-cargo run -p indusagi-cli -- --version          # indusagi 0.1.0
-cargo run -p indusagi-cli -- --help             # the usage banner + the flag table
-cargo run -p indusagi-cli -- --bogus            # exit 2: unrecognised flag "--bogus".
+cargo run -- --version          # indusagi 0.1.0
+cargo run -- --help             # the usage banner + the flag table
+cargo run -- --bogus            # exit 2: unrecognised flag "--bogus".
 ```
 
 The `--help` banner opens with `indusagi — a terminal-first AI coding agent.` and `Usage: indusagi [options] [prompt...]`, one row per flag (the 28-column left pad is byte-exact to the TS `describeFlag`), and a trailing note about prompt-vs-attended behavior.
@@ -202,7 +213,7 @@ Set the key for the model you intend to run first. For most use the Anthropic ke
 
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
-cargo run -p indusagi-cli -- -m claude-sonnet-4 -p "what does this repo do?"
+cargo run -- -m claude-sonnet-4 -p "what does this repo do?"
 ```
 
 The default model, when neither `--model` nor `settings.json` names a catalog-known model, is the fallback `claude-sonnet-4` (`shell_app::config::FALLBACK_MODEL_ID`). Each candidate is validated against the catalog with `llmgateway::get_card` before it is honored. See the [LLM Gateway](/rust/subsystems/llm-gateway) for the model catalog and connectors.
@@ -235,7 +246,7 @@ With a key set and an attended terminal, a bare invocation lands in `Mode::Repl`
 
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
-cargo run -p indusagi-cli            # attended + no prompt → interactive REPL/TUI
+cargo run            # attended + no prompt → interactive REPL/TUI
 # or, on the built binary:
 ./target/release/indusagi
 ```

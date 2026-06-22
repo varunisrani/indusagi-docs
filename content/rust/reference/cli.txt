@@ -1,7 +1,7 @@
 # CLI Reference
 
-> The `indusagi` binary — the command-line front door of the Rust edition. The `indusagi-cli`
-> crate is a thin `main() -> ExitCode` shim that collects argv and drives the async
+> The `indusagi` binary — the command-line front door of the Rust edition. The binary target
+> lives in the `indusagi` crate: a thin `main() -> ExitCode` shim that collects argv and drives the async
 > `indusagi::shell_app::run`. All real work lives in the merged `indusagi` crate's `shell_app`
 > module: a hand-rolled, table-driven 10-flag grammar, the help/version/print/wire/repl mode
 > derivation, the five-stage boot pipeline, and three runners. Exit codes flow out by value —
@@ -10,7 +10,7 @@
 ## Table of Contents
 
 - [Invocation](#invocation)
-- [The Binary Crate](#the-binary-crate)
+- [The Binary Target](#the-binary-target)
 - [Flags](#flags)
 - [Parsing Grammar](#parsing-grammar)
 - [Modes](#modes)
@@ -27,9 +27,10 @@
 
 ## Invocation
 
-The workspace ships exactly one `[[bin]]`, named `indusagi`, defined by the `indusagi-cli` crate
-(`crates/indusagi-cli/Cargo.toml`). The binary is distributed as a GitHub Release / `cargo
-binstall` artifact, not a crates.io publish.
+The workspace ships exactly one `[[bin]]`, named `indusagi`, defined by the `indusagi` crate
+(`crates/indusagi/Cargo.toml`), which carries both the library and this binary. The crate is
+published to crates.io, so the binary installs with `cargo install indusagi`; prebuilt
+GitHub Release / `cargo binstall` artifacts are also available.
 
 ```bash
 indusagi [options] [prompt...]
@@ -53,9 +54,9 @@ indusagi                                 # interactive REPL when attended (a TTY
 indusagi -m claude-sonnet-4 -p "what does this build do?"
 ```
 
-## The Binary Crate
+## The Binary Target
 
-`crates/indusagi-cli/src/main.rs` does exactly three things and delegates everything else:
+`crates/indusagi/src/main.rs` does exactly three things and delegates everything else:
 
 ```rust
 fn main() -> ExitCode {
@@ -378,7 +379,7 @@ OAuth helper that manages browser sign-ins for providers that support them. `arg
 credential store (`auth.json`) and are never printed.
 
 > **This is a standalone API surface, not yet wired into the binary.** `shell_app::run` (and the
-> `indusagi-cli` `main`) only run the flag-grammar → mode → boot → runner path; there is no `auth`
+> binary's `main`) only run the flag-grammar → mode → boot → runner path; there is no `auth`
 > first-argument dispatch in `cli::run`. So invoking `indusagi auth status` on the command line
 > today treats `auth status` as a positional prompt (a Print-mode run), *not* the auth command.
 > `run_auth_command` is reached only programmatically — call it directly, passing the slice after
@@ -436,7 +437,7 @@ from `shell_app::run`'s flag-parsing path.
 | `1` | A faulted run, or a launcher-bug `NoRunnerError` (`run failed: …`). |
 | `2` | Bad usage — an unparseable `argv` (`InvocationError`), or an unknown `auth` subcommand / missing verb. |
 
-`run(argv) -> ExitCode` resolves the code by value; the `indusagi-cli` `main` is the only place an
+`run(argv) -> ExitCode` resolves the code by value; the binary's `main` is the only place an
 `ExitCode` reaches the OS. The runner's `i32` is masked into the `0..=255` byte the OS accepts
 (`(code & 0xff) as u8`). The teardown `for close in … .rev()` always runs, swallowing any failure
 so a flaky teardown never masks the run's own exit code.

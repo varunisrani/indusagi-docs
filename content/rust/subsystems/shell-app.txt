@@ -6,7 +6,7 @@
 > configured (`locate` + `config`), assemble everything into an immutable `BootContext`
 > through an ordered `Stage` pipeline (`boot`), and dispatch to one of three stream-oriented
 > `Runner`s (`runners`) — plus two side concerns: idempotent startup upgrades (`upgrade`)
-> and an `auth` OAuth-helper subcommand (`auth_cli`). It is the layer the `indusagi-cli`
+> and an `auth` OAuth-helper subcommand (`auth_cli`). It is the layer the `indusagi`
 > binary composes via the single call `indusagi::shell_app::run(argv)`.
 
 This is the Rust edition of the shell-app layer documented for
@@ -39,7 +39,7 @@ documents the internal structure.
 ## Quickstart
 
 `run(argv)` drives one invocation to an exit code without ever exiting the process; the thin
-`fn main()` in `indusagi-cli` is the only place the returned `ExitCode` reaches the OS.
+`fn main()` in the `indusagi` crate is the only place the returned `ExitCode` reaches the OS.
 
 ```rust
 use indusagi::shell_app::run;
@@ -553,6 +553,6 @@ test.
   under the `tui` feature so a non-TTY launch or `--no-default-features` build falls back to
   the text loop.
 
-`indusagi-cli`'s `fn main()` composes this layer with a single call:
+The `indusagi` binary's `fn main()` composes this layer with a single call:
 `runtime.block_on(indusagi::shell_app::run(argv))`. Back to the
 [Architecture overview](/rust/architecture).

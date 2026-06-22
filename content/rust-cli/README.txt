@@ -33,12 +33,15 @@ the OS launched under. The library surface is `induscode::<module>` (e.g.
 ## Install
 
 ```bash
-cargo install induscode          # installs indusr + indusagir
+cargo install induscode          # the CLI — installs indusr + indusagir
 cargo binstall induscode         # prebuilt binary (no compile)
+cargo add induscode              # the library — depend on the agent (induscode::<module>)
 ```
 
-`induscode` is the crate; installing it registers **two bin targets**, both pointing
-at `src/bin/main.rs`:
+`induscode` is published to crates.io as one crate that is **both** a library and a binary.
+`cargo install induscode` installs the CLI; `cargo add induscode` adds it as a library
+dependency (surface `induscode::<module>`, e.g. `induscode::boot`, `induscode::conductor`).
+Installing it registers **two bin targets**, both pointing at `src/bin/main.rs`:
 
 ```toml
 # crates/induscode/Cargo.toml

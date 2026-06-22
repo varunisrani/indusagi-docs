@@ -36,12 +36,11 @@ pub use crate::facade::mcp;
 
 ## Workspace and crate layout
 
-The repository is a Cargo **virtual workspace** (`indusagi-rust/Cargo.toml`). The thirteen former subsystem library crates have been **merged into the single `indusagi` crate** as modules, so they are no longer workspace members. Three crates remain, plus the build helper:
+The repository is a Cargo **virtual workspace** (`indusagi-rust/Cargo.toml`). The thirteen former subsystem library crates have been **merged into the single `indusagi` crate** as modules, so they are no longer workspace members. That one crate carries **both** the library and the CLI binary. Two crates remain, plus the build helper:
 
 | Crate | Kind | Role |
 |-------|------|------|
-| `indusagi` | `[lib]` (`name = "indusagi"`, `src/lib.rs`) | The merged framework — every subsystem is a module here |
-| `indusagi-cli` | `[[bin]]` (`name = "indusagi"`, `src/main.rs`) | The only binary in the workspace; owns `main()` + `ExitCode`, a thin shim over `indusagi::shell_app::run` |
+| `indusagi` | `[lib]` (`name = "indusagi"`, `src/lib.rs`) **and** `[[bin]]` (`name = "indusagi"`, `src/main.rs`) | The merged framework — every subsystem is a module here — plus the CLI binary (a thin `main()` + `ExitCode` shim over `indusagi::shell_app::run`). `cargo add indusagi` for the library, `cargo install indusagi` for the binary. |
 | `indusagi-testkit` | dev-only lib (`publish = false`) | Shared fakes/fixtures (`ScriptedModel`, wiremock helper, render harness) over the gateway + runtime contracts |
 | `xtask` | bin | Build/automation helper |
 
@@ -50,11 +49,10 @@ The repository is a Cargo **virtual workspace** (`indusagi-rust/Cargo.toml`). Th
 [workspace]
 members = [
     "crates/indusagi",
-    "crates/indusagi-cli",
     "crates/indusagi-testkit",
     "xtask",
 ]
-default-members = ["crates/indusagi-cli"]
+default-members = ["crates/indusagi"]
 resolver = "3"
 
 [workspace.package]
@@ -63,7 +61,7 @@ edition      = "2024"
 rust-version = "1.96"
 ```
 
-The `indusagi-cli` binary is intentionally tiny: it owns the (current-thread) tokio runtime and calls `indusagi::shell_app::run`, since the whole pipeline (argv → flag grammar → mode → boot → runner → exit code) lives inside the merged crate. `indusagi-testkit` is a normal dependency of `indusagi`, while `indusagi` depends back on it only as a dev-dependency, so the resulting cycle is dev-only (cargo permits it).
+The `indusagi` crate's binary target is intentionally tiny: its `main()` owns the (current-thread) tokio runtime and calls `indusagi::shell_app::run`, since the whole pipeline (argv → flag grammar → mode → boot → runner → exit code) lives inside the merged crate. `indusagi-testkit` is a normal dependency of `indusagi`, while `indusagi` depends back on it only as a dev-dependency, so the resulting cycle is dev-only (cargo permits it).
 
 The release profile is tuned for a latency-sensitive agent (`opt-level = 3`, not `"z"`):
 

@@ -713,17 +713,18 @@ A build without `mcp` drops both the `interop` module and the
 
 ## Crates and binaries
 
-The Rust edition is a three-crate workspace. Only `indusagi` is the library; the
-binary lives in `indusagi-cli`; `indusagi-testkit` is dev-only and never published.
+The Rust edition is a two-crate workspace (plus the `xtask` build helper). The published
+`indusagi` crate is **both** the library and the binary; `indusagi-testkit` is dev-only and
+never published. So `cargo add indusagi` pulls the library and `cargo install indusagi`
+installs the binary.
 
 | Crate | Kind | Purpose |
 |-------|------|---------|
-| `indusagi` | `[lib]` (`name = "indusagi"`, `src/lib.rs`) | The single merged framework library — every subsystem as a module. |
-| `indusagi-cli` | `[[bin]]` (`name = "indusagi"`, `src/main.rs`) | The only binary in the workspace; owns `main()` and `ExitCode`. Depends on `indusagi` and reaches the whole pipeline through `indusagi::shell_app::run`. |
+| `indusagi` | `[lib]` (`name = "indusagi"`, `src/lib.rs`) **and** `[[bin]]` (`name = "indusagi"`, `src/main.rs`) | The single merged framework — every subsystem as a module — plus the only binary in the workspace (`main()` + `ExitCode`, reaching the whole pipeline through `indusagi::shell_app::run`). Published to crates.io. |
 | `indusagi-testkit` | lib, `publish = false` | Dev-only test helpers/fixtures (`ScriptedModel`, the wiremock helper, the render harness) shared across the test suites. Path-only, stripped from the published manifest. |
 
 ```bash
-cargo build --release -p indusagi-cli        # builds the `indusagi` binary
+cargo build --release -p indusagi        # builds the `indusagi` binary
 ./target/release/indusagi --version          # prints the version
 ./target/release/indusagi -p "summarize this repo"
 ./target/release/indusagi                    # interactive ratatui REPL (feature `tui`)

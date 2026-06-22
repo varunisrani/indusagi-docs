@@ -27,7 +27,7 @@ const PRODUCTS: Product[] = [
     methods: [
       { id: "npm", label: "npm", live: true, cmd: "npm install -g indusagi" },
       { id: "pip", label: "pip", live: true, cmd: "pip install indusagi" },
-      { id: "cargo", label: "cargo", cmd: "cargo install --git https://github.com/varunisrani/indusagi-rust indusagi-cli" },
+      { id: "cargo", label: "cargo", live: true, cmd: "cargo install indusagi" },
     ],
   },
   {
@@ -38,7 +38,7 @@ const PRODUCTS: Product[] = [
     methods: [
       { id: "npm", label: "npm", live: true, cmd: "npm install -g indusagi-coding-agent" },
       { id: "pip", label: "pip", live: true, cmd: "pip install induscode" },
-      { id: "cargo", label: "cargo", cmd: "cargo install --git https://github.com/varunisrani/indusagi-ts induscode" },
+      { id: "cargo", label: "cargo", live: true, cmd: "cargo install induscode" },
     ],
   },
 ];
@@ -164,7 +164,7 @@ export function HeroInstall() {
         </div>
         <p className="mt-2.5 text-center text-xs text-[color:var(--muted)]">
           {method.id === "cargo"
-            ? "Native single binary — prebuilt installers (shell · Homebrew · cargo binstall) ship via GitHub Releases."
+            ? "Installs the latest crates.io release as a native single binary. `cargo binstall` and prebuilt installers (shell · Homebrew) ship via GitHub Releases."
             : product.id === "indusagi"
               ? "Requires Node 20+ (npm) or Python 3.11+ (pip). Set a provider API key, then import or run it."
               : "Requires Node 20+ (npm) or Python 3.11+ (pip). Set a provider API key, then launch the console."}

@@ -4,7 +4,7 @@
 > 0 failing**, run twice with no flakes, strictly network-free and
 > credential-free. Tests live inline as `#[cfg(test)] mod tests` next to the code
 > they cover (npm-style: one module, many test modules), and one out-of-process
-> binary smoke test sits under `indusagi-cli/tests/`. The dev-only
+> binary smoke test sits under `crates/indusagi/tests/`. The dev-only
 > `indusagi-testkit` crate carries four reusable seams (a scripted-model double, a
 > wiremock transcript server, a render harness, and a golden-corpus loader); it is
 > wired in as a `dev-dependency` and self-tested, but the inline suite currently
@@ -37,19 +37,18 @@ variables, no API keys, no network, no terminal.
 export PATH="$HOME/.cargo/bin:$PATH"   # rustc/cargo 1.96.0, edition 2024
 
 cargo test --workspace                 # the whole suite (2062 tests)
-cargo test -p indusagi                 # the framework crate's inline tests
+cargo test -p indusagi                 # the framework crate's inline tests + the binary smoke test
 cargo test -p indusagi-testkit         # the testkit's own self-tests
-cargo test -p indusagi-cli             # the binary smoke test (out-of-process)
 cargo test -p indusagi runtime::       # one module path's tests
 cargo test --workspace -- --list       # enumerate test names without running
 ```
 
 The workspace is a virtual workspace whose members are `crates/indusagi`,
-`crates/indusagi-cli`, `crates/indusagi-testkit`, and `xtask`
-(`default-members = ["crates/indusagi-cli"]`). Because the thirteen former
-per-subsystem crates were merged into the single `indusagi` library crate as
+`crates/indusagi-testkit`, and `xtask`
+(`default-members = ["crates/indusagi"]`). Because the thirteen former
+per-subsystem crates were merged into the single `indusagi` crate as
 modules, almost the entire suite compiles as one test binary — see
-[The three crates](/rust/) in the overview and [Architecture](/rust/architecture)
+[The crates](/rust/) in the overview and [Architecture](/rust/architecture)
 for the merge rationale.
 
 The full green gate, as recorded in the repository README, is:
@@ -87,13 +86,13 @@ Two things sit outside the inline pattern:
 | Location | Kind | Purpose |
 |----------|------|---------|
 | `crates/indusagi/src/**` (inline `#[cfg(test)] mod tests`) | unit / integration | The framework suite — pure-logic units, conductor runs against inline `impl ModelInvoker` doubles, connector decode/fold tests, and ratatui frame snapshots. |
-| `crates/indusagi-cli/tests/binary_smoke.rs` | integration (out-of-process) | Drives the *real* built binary via `CARGO_BIN_EXE_indusagi` through `--help` / `--version` / `--bogus`. |
+| `crates/indusagi/tests/binary_smoke.rs` | integration (out-of-process) | Drives the *real* built binary via `CARGO_BIN_EXE_indusagi` through `--help` / `--version` / `--bogus`. |
 | `crates/indusagi-testkit/src/*` (inline `mod tests`) | self-test | The four shared seams test themselves — `script.rs`, `wire.rs`, `render.rs`, and `fixture.rs` each carry their own `#[cfg(test)]` block. |
 | `crates/indusagi/benches/*.rs` | criterion benches | Hot-path microbenchmarks; compiled by `cargo bench`, not `cargo test`. |
 | `xtask/src/*` | self-test | The lineage / embed hygiene gates carry inline tests. |
 
-The framework crate has **no** `tests/` directory at all, and `indusagi-cli`'s
-`tests/` holds only `binary_smoke.rs`: the higher-level "does the whole loop run
+The framework's inline tests carry the bulk of the suite, and the crate's
+`tests/` directory holds only `binary_smoke.rs`: the higher-level "does the whole loop run
 end-to-end" tests are themselves inline (e.g. the `tui_render` interactive-app
 tests and the `runtime` conductor tests), so the inline tree doubles as the map of
 the public surface.
@@ -110,7 +109,7 @@ cycle is dev-only, which cargo permits.
 
 > **Status note:** the testkit is declared as a dev-dependency of `indusagi` but
 > the inline `#[cfg(test)]` suite does **not** currently import it — there are zero
-> `use indusagi_testkit::…` sites in `crates/indusagi` or `crates/indusagi-cli`.
+> `use indusagi_testkit::…` sites in `crates/indusagi`.
 > The conductor/runner tests hand-roll their own inline `impl ModelInvoker`
 > doubles (10 such inline impls across `src`), the connector tests decode recorded
 > bodies directly rather than through `TranscriptServer`, and the TUI tests draw
@@ -373,7 +372,7 @@ drives the *real* built `indusagi` binary (via cargo's
 paths that need no terminal, network, or agent:
 
 ```rust
-// crates/indusagi-cli/tests/binary_smoke.rs
+// crates/indusagi/tests/binary_smoke.rs
 fn bin() -> &'static str { env!("CARGO_BIN_EXE_indusagi") }
 
 #[test] fn help_exits_0_and_prints_the_usage_banner() { /* --help → exit 0 */ }

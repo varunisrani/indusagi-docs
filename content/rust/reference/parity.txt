@@ -324,7 +324,7 @@ TypeScript ground truth:
 |---|---|---|---|
 | TypeScript (original / ground truth) | [/docs](/docs) | npm `indusagi` v0.13.1 | The `src/index.ts` barrel; subpath exports `indusagi/{ai,agent,mcp,memory}`. |
 | Python | [/python](/python) | `pip install indusagi` | Lazy per-layer subpackages; `snake_case`, `async`/`await`. |
-| **Rust (this edition)** | [/rust](/rust) | crates.io `indusagi` + the `indusagi` binary | The `src/lib.rs` umbrella barrel; one crate, many modules; `async` over Tokio. |
+| **Rust (this edition)** | [/rust](/rust) | crates.io `indusagi` — `cargo install indusagi` (binary) / `cargo add indusagi` (library) | The `src/lib.rs` umbrella barrel; one crate, many modules; `async` over Tokio. |
 
 The Rust edition tracks the TypeScript ground truth module-for-module and is
 declared at **full parity (26/26)** — the same subsystems, the same 13-card model
