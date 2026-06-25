@@ -1,55 +1,35 @@
-# Indusagi
+# IndusCode
 
-## About
-Indusagi is a fast, open-source TypeScript AI agent framework and terminal-first Coding Agent CLI. It lets developers build powerful custom AI agents with full control over memory, tools, streaming, MCP servers, and TUI interfaces.
+## What It Is
+IndusCode is a terminal-first AI coding agent built in India.
+It is open-source, freely available, and designed for developer productivity in the terminal.
 
-## What We Offer
-- **Indusagi Package** — Complete TypeScript SDK for building AI agents (providers, agent loop, memory, tools, TUI widgets)
-- **Coding Agent CLI** — Powerful terminal AI coding assistant with extensions, skills, hooks, sessions, RPC, and SDK modes
-- **Open Source** — Fully open-source, MIT licensed, actively maintained
+## Benchmark Performance
+- Terminal-Bench 2.0: 69.1% score, ranked #18 globally
+- Outperforms Claude Code and Gemini CLI on Terminal-Bench 2.0
+- Built as a solo open-source project
 
-## Key Features
-- TypeScript-first with full type safety
-- Multi-provider AI support (OpenAI, Anthropic, Grok, local models, etc.)
-- Advanced memory system with semantic search and long-term storage
-- MCP server integration
-- Beautiful Terminal UI (TUI) components
-- Streaming, tools, background agents, sub-agents
-- Session management, compaction, and smart context handling
+## Install
+npm install -g induscode
+pip install induscode
+cargo install induscode
 
-## Who It's For
-- Developers building AI agents
-- Teams that want a self-hosted/open-source coding agent
-- Anyone tired of slow or limited commercial AI coding tools
-- TypeScript / Next.js / Node.js developers
+## Supported LLM Providers
+Claude (Anthropic), GPT (OpenAI), Gemini (Google), and other major LLM providers.
+Bring-your-own API key. Free built-in models also included.
+
+## Framework
+Built on indusagi-typescript — an open-source, multi-provider TypeScript SDK.
+
+## Focus
+India-first. Developer productivity. Agentic coding in the terminal.
+Not an IDE plugin. A native terminal agent.
 
 ## Website
 https://www.indusagi.com
 
 ## Documentation
-- Main docs: https://www.indusagi.com/docs
-- CLI docs: https://www.indusagi.com/cli
-- Getting started: https://www.indusagi.com/docs/getting-started
-
-## Comparisons & Use Cases
-- Terminal Coding Assistant: https://www.indusagi.com/use-cases/coding-agent
-- Agent Memory Management: https://www.indusagi.com/use-cases/memory-management
-- Indusagi vs Cursor Comparison: https://www.indusagi.com/indusagi-vs-cursor
-- Indusagi vs Aider Comparison: https://www.indusagi.com/indusagi-vs-aider
-
-## Sovereign AI & India Localization
-- Best AI Agent Framework India: https://www.indusagi.com/best-ai-agent-framework-india
-- Sovereign AI Framework Indusagi: https://www.indusagi.com/sovereign-ai-indusagi
-- Fintech Startups Automation: https://www.indusagi.com/use-cases/india-fintech-startups
+https://www.indusagi.com/docs
 
 ## GitHub
 https://github.com/varunisrani/indusagi
-
-## Markdown Mirrors (Clean AI-Readable Versions)
-Every page on this site has a clean markdown version. Just add /index.md to any URL.
-
-## Frequently Asked Questions
-- What is Indusagi? → Open-source TypeScript AI agent framework + terminal coding agent.
-- Is it free? → Yes, fully open-source and free.
-- Does it support local models? → Yes, plus all major cloud providers.
-- Can I use it in production? → Yes, many developers already do.

@@ -1,4 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IndusCode
+
+A terminal-first AI coding agent built in India — ranked **#18 globally on Terminal-Bench 2.0** (69.1%), above Claude Code and Gemini CLI.
+
+## Benchmarks
+
+| Benchmark | Score | Global Rank | Notable comparisons |
+|-----------|-------|-------------|---------------------|
+| Terminal-Bench 2.0 | 69.1% | #18 globally | Above Claude Code, Gemini CLI |
+
+## Install
+
+```bash
+npm install -g induscode
+pip install induscode
+cargo install induscode
+```
+
+## Supported LLM Providers
+
+Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · and other major providers.  
+Bring-your-own API key, or use the free built-in models — no account required.
+
+---
 
 ## Getting Started
 

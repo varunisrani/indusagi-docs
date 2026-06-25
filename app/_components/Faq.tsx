@@ -27,6 +27,26 @@ const FAQ = [
     q: "How does it manage context windows?",
     a: "An automated session-compaction algorithm compiles long histories into semantic summaries, preserving project context while reducing token cost.",
   },
+  {
+    q: "How does IndusCode compare to Claude Code and GitHub Copilot?",
+    a: "IndusCode ranked #18 globally on Terminal-Bench 2.0 with a 69.1% score, finishing above Claude Code and Gemini CLI. It is a terminal-native agent, not an IDE plugin.",
+  },
+  {
+    q: "What is IndusCode's Terminal-Bench 2.0 ranking?",
+    a: "IndusCode scored 69.1% on Terminal-Bench 2.0, placing #18 globally as a solo-built open-source project.",
+  },
+  {
+    q: "Is IndusCode free to use?",
+    a: "Yes. IndusCode includes free built-in models and also supports bring-your-own API keys for Claude, GPT, Gemini, and other providers.",
+  },
+  {
+    q: "How do I install IndusCode?",
+    a: "Run npm install -g induscode, pip install induscode, or cargo install induscode depending on your environment.",
+  },
+  {
+    q: "Does IndusCode work with my existing LLM provider?",
+    a: "Yes. IndusCode supports multiple providers including Claude, GPT, and Gemini, letting you switch without changing your workflow.",
+  },
 ];
 
 export function Faq() {
