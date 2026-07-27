@@ -14,6 +14,16 @@ const DOC_FAMILIES = [
   { href: "/rust-cli", label: "IndusAGI Coding Agent (Rust)", note: "Coding-agent CLI", badge: "RS" },
 ];
 
+// GitHub repositories surfaced in the GitHub dropdown.
+const GITHUB_REPOS = [
+  { href: "https://github.com/varunisrani/indusagi-sdk.git", label: "indusagi-sdk", note: "TypeScript SDK", badge: "TS" },
+  { href: "https://github.com/varunisrani/induscode-ts.git", label: "induscode-ts", note: "TypeScript Coding Agent", badge: "TS" },
+  { href: "https://github.com/varunisrani/indusagi-rust.git", label: "indusagi-rust", note: "Rust SDK", badge: "RS" },
+  { href: "https://github.com/varunisrani/induscode-rust.git", label: "induscode-rust", note: "Rust Coding Agent", badge: "RS" },
+  { href: "https://github.com/varunisrani/indusagi-python.git", label: "indusagi-python", note: "Python SDK", badge: "PY" },
+  { href: "https://github.com/varunisrani/induscode-python.git", label: "induscode-python", note: "Python Coding Agent", badge: "PY" },
+];
+
 function useTheme(): [string, () => void] {
   const [theme, setTheme] = useState("dark");
   useEffect(() => {
@@ -40,6 +50,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [docsMenuOpen, setDocsMenuOpen] = useState(false);
+  const [githubMenuOpen, setGithubMenuOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const pathname = usePathname();
 
@@ -54,6 +65,7 @@ export function Header() {
   useEffect(() => {
     setMobileMenuOpen(false);
     setDocsMenuOpen(false);
+    setGithubMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -164,14 +176,74 @@ export function Header() {
                 )}
               </div>
 
-              <a
-                href="https://github.com/varunisrani/indusagi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={navLink}
-              >
-                GitHub
-              </a>
+              {/* GitHub dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setGithubMenuOpen((v) => !v)}
+                  aria-expanded={githubMenuOpen}
+                  aria-haspopup="menu"
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    githubMenuOpen
+                      ? "text-[color:var(--accent)]"
+                      : "text-[color:var(--muted)] hover:text-[color:var(--fg)]"
+                  }`}
+                >
+                  GitHub
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className={`transition-transform ${githubMenuOpen ? "rotate-180" : ""}`}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+
+                {githubMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setGithubMenuOpen(false)} />
+                    <div
+                      role="menu"
+                      className="absolute left-0 mt-2 w-80 z-50 rounded-2xl border border-[color:var(--border)] p-2 shadow-xl"
+                      style={{ background: "var(--surface)" }}
+                    >
+                      <div className="px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-[color:var(--muted)] font-mono">
+                        Repositories
+                      </div>
+                      {GITHUB_REPOS.map((r) => (
+                        <a
+                          key={r.href}
+                          href={r.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          role="menuitem"
+                          onClick={() => setGithubMenuOpen(false)}
+                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[color:var(--accent-soft)]"
+                        >
+                          <span
+                            className="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-white text-[10px] font-semibold"
+                            style={{ background: "var(--accent)" }}
+                          >
+                            {r.badge}
+                          </span>
+                          <span className="min-w-0">
+                            <span
+                              className="block text-sm font-medium truncate"
+                              style={{ color: "var(--fg)" }}
+                            >
+                              {r.label}
+                            </span>
+                            <span className="block text-xs text-[color:var(--muted)]">{r.note}</span>
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <a
                 href="https://www.npmjs.com/package/indusagi"
                 target="_blank"
@@ -286,6 +358,48 @@ export function Header() {
             >
               GitHub ↗
             </a>
+            <button
+              onClick={() => setExpandedSection(expandedSection === "github" ? null : "github")}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-base font-semibold text-[color:var(--fg)]`}
+            >
+              GitHub Repos
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={`transition-transform ${expandedSection === "github" ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {expandedSection === "github" && (
+              <div className="ml-4 pl-4 border-l border-[color:var(--border)] flex flex-col gap-0.5">
+                {GITHUB_REPOS.map((r) => (
+                  <a
+                    key={r.href}
+                    href={r.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[color:var(--muted)]"
+                  >
+                    <span
+                      className="w-6 h-6 shrink-0 rounded-lg flex items-center justify-center text-white text-[10px] font-semibold"
+                      style={{ background: "var(--accent)" }}
+                    >
+                      {r.badge}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate">{r.label}</span>
+                      <span className="block text-xs text-[color:var(--muted)]">{r.note}</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            )}
             <a
               href="https://www.npmjs.com/package/indusagi"
               target="_blank"
